@@ -48,12 +48,12 @@
 
         #team-a {
             background: rgba(0, 0, 255, 0.2);
-            border: 2px solid #0066cc;
+            border: 3px solid #0066cc;
         }
 
         #team-b {
             background: rgba(255, 0, 0, 0.2);
-            border: 2px solid #cc0000;
+            border: 3px solid #cc0000;
         }
 
         /* Character pool */
@@ -91,35 +91,35 @@
         }
 
         .character.selected {
-            opacity: 0.5;
+            /* opacity: 0.5; */
+            background: rgba(51, 51, 51, 0.2);
             cursor: not-allowed;
+        }
+
+        .character.selected img {
+            opacity: 0.3; /* Make the image semi-transparent */
+        }
+        .character.selected span {
+            opacity: 0.3; /* Make the hunter name semi-transparent */
         }
 
         .character.banned {
-            background: #ff0000;
+            background: linear-gradient(to right, #f934d0, #9724f0);
             opacity: 0.5;
             cursor: not-allowed;
-            filter: grayscale(100%);
+            filter: grayscale(80%);
         }
 
         .character.team-a-previous {
-            border-left: 2px solid rgba(0, 102, 204, 0.3);
-            border-bottom: 2px solid rgba(0, 102, 204, 0.3);
+            border-left: 4px solid rgba(0, 102, 204, 0.3);
+            border-bottom: 4px solid rgba(0, 102, 204, 0.3);
             cursor: not-allowed;
         }
 
         .character.team-b-previous {
-            border-right: 2px solid rgba(204, 0, 0, 0.3);
-            border-top: 2px solid rgba(204, 0, 0, 0.3);
+            border-right: 4px solid rgba(204, 0, 0, 0.3);
+            border-top: 4px solid rgba(204, 0, 0, 0.3);
             cursor: not-allowed;
-        }
-
-        .character.team-a-current {
-            border: 2px solid #0066cc;
-        }
-
-        .character.team-b-current {
-            border: 2px solid #cc0000;
         }
 
         /* Auto-selected overlay */
@@ -252,6 +252,12 @@
             align-items: center;
         }
 
+        .exclusivity-select {
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+        }
+
         #start-draft {
             margin-left: 10px;
         }
@@ -338,6 +344,12 @@
                         <button id="fearless-mode">Fearless</button>
                     </div>
                     <button id="start-draft">Start Draft</button>
+                    <div id="exclusivity-select" class="exclusivity-select hidden">
+                        <label>
+                            Hunter exclusivity
+                            <input type="checkbox" id="hunter-exclusivity" checked>
+                        </label>
+                    </div>
                     <div id="ban-select" class="ban-select hidden">
                         <label>Bans per team:&nbsp;</label>
                         <select id="ban-count">
@@ -390,11 +402,12 @@
         let teamAPicks = [];
         let teamBPicks = [];
         let bannedCharacters = [];
-        let gameMode = null;
+        let gameMode = 'normal';
         let maxBans = parseInt(document.getElementById('ban-count').value);
         let gameCounter = 0;
         let draftActive = false;
         let autoSelectedChars = new Set();
+        let hunterExclusivity = true;
         
         // Only used in Fearless mode
         let teamAHistory = new Set();
@@ -452,6 +465,7 @@
             document.getElementById('normal-mode').onclick = () => {
                 gameMode = 'normal';
                 document.getElementById('ban-select').classList.remove('hidden');
+                document.getElementById('exclusivity-select').classList.remove('hidden');
                 document.querySelector('.mode-toggle').classList.remove('fearless');
                 document.getElementById('start-draft').disabled = false;
                 document.getElementById('game-counter').classList.add('hidden');
@@ -460,10 +474,17 @@
             document.getElementById('fearless-mode').onclick = () => {
                 gameMode = 'fearless';
                 document.getElementById('ban-select').classList.add('hidden');
+                document.getElementById('exclusivity-select').classList.remove('hidden');
                 document.querySelector('.mode-toggle').classList.add('fearless');
                 document.getElementById('start-draft').disabled = false;
                 maxBans = 2;
                 document.getElementById('game-counter').classList.remove('hidden');
+            };
+
+            document.getElementById('hunter-exclusivity').onchange = (e) => {
+                if (!draftActive) {
+                    hunterExclusivity = e.target.checked;
+                }
             };
         }
 
@@ -492,16 +513,20 @@
 
         function autoSelect() {
             const availableCharacters = characters.filter(char => {
-                const isAvailableThisRound = !teamAPicks.includes(char.name) && 
-                    !teamBPicks.includes(char.name) && 
-                    !bannedCharacters.includes(char.name);
+                const isAvailableThisRound = !bannedCharacters.includes(char.name);
+                const isNotDoublePickedByTeam = currentTeam === 'A' ? 
+                    !teamAPicks.includes(char.name) : 
+                    !teamBPicks.includes(char.name);
+                const isNotPickedByOtherTeam = hunterExclusivity ? 
+                    !teamAPicks.includes(char.name) && !teamBPicks.includes(char.name) : 
+                    true;
                 
-                if (gameMode === 'normal') return isAvailableThisRound;
+                if (gameMode === 'normal') return isAvailableThisRound && isNotDoublePickedByTeam && isNotPickedByOtherTeam;
                 
                 const isAvailableHistorically = currentTeam === 'A' ? 
                     !teamAHistory.has(char.name) : 
                     !teamBHistory.has(char.name);
-                return isAvailableThisRound && isAvailableHistorically;
+                return isAvailableThisRound && isNotDoublePickedByTeam && isNotPickedByOtherTeam && isAvailableHistorically;
             });
             if (availableCharacters.length > 0) {
                 const randomIndex = Math.floor(Math.random() * availableCharacters.length);
@@ -528,8 +553,15 @@
                         !teamBHistory.has(char);
                 }
                 
-                if (!teamAPicks.includes(char) && !teamBPicks.includes(char) && 
-                    !bannedCharacters.includes(char) && canSelect) {
+                const isNotBanned = !bannedCharacters.includes(char);
+                const isNotDoublePickedByTeam = currentTeam === 'A' ? 
+                    !teamAPicks.includes(char) : 
+                    !teamBPicks.includes(char);
+                const isNotPickedByOtherTeam = hunterExclusivity ? 
+                    !teamAPicks.includes(char) && !teamBPicks.includes(char) : 
+                    true;
+                
+                if (isNotBanned && isNotDoublePickedByTeam && isNotPickedByOtherTeam && canSelect) {
                     if (currentTeam === 'A') {
                         teamAPicks.push(char);
                         if (gameMode === 'fearless') teamAHistory.add(char);
@@ -563,12 +595,16 @@
                     charDiv.classList.add('banned');
                 }
                 if (teamAPicks.includes(charName)) {
-                    charDiv.classList.add('selected');
-                    charDiv.classList.add('team-a-current');
+                    if (hunterExclusivity) {
+                        charDiv.classList.add('selected');
+                    }
+                    charDiv.classList.add('team-a-previous');
                 }
                 if (teamBPicks.includes(charName)) {
-                    charDiv.classList.add('selected');
-                    charDiv.classList.add('team-b-current');
+                    if (hunterExclusivity) {
+                        charDiv.classList.add('selected');
+                    }
+                    charDiv.classList.add('team-b-previous');
                 }
             });
         }
@@ -653,7 +689,7 @@
             if (gameMode === 'normal') {
                 document.getElementById('ban-select').classList.remove('hidden');
             }
-            
+            document.getElementById('hunter-exclusivity').disabled = false;
         }
 
         document.getElementById('start-draft').onclick = () => {
@@ -681,6 +717,7 @@
             document.getElementById('normal-mode').disabled = true;
             document.getElementById('fearless-mode').disabled = true;
             document.getElementById('ban-select').classList.add('hidden');
+            document.getElementById('hunter-exclusivity').disabled = true;
             updateStatusMessage();
             startTimer();
             updateCharacterPool();
