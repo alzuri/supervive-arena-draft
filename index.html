@@ -104,13 +104,13 @@
 
         .character.team-a-previous {
             border-left: 2px solid rgba(0, 102, 204, 0.3);
-            border-top: 2px solid rgba(0, 102, 204, 0.3);
+            border-bottom: 2px solid rgba(0, 102, 204, 0.3);
             cursor: not-allowed;
         }
 
         .character.team-b-previous {
             border-right: 2px solid rgba(204, 0, 0, 0.3);
-            border-bottom: 2px solid rgba(204, 0, 0, 0.3);
+            border-top: 2px solid rgba(204, 0, 0, 0.3);
             cursor: not-allowed;
         }
 
@@ -606,11 +606,26 @@
                     currentTeam = currentTeam === 'A' ? 'B' : 'A';
                 }
             } else if (currentPhase === 'pick') {
-                if (teamAPicks.length === 4 && teamBPicks.length === 4) {
+                // Check total picks to determine phase
+                const totalPicks = teamAPicks.length + teamBPicks.length;
+                
+                if (totalPicks === 8) { // 4 + 4 picks total
                     endDraft();
                     return;
                 }
-                currentTeam = currentTeam === 'A' ? 'B' : 'A';
+                
+                // Snake draft order logic
+                if (totalPicks < 1) { // First pick goes to A
+                    currentTeam = 'A';
+                } else if (totalPicks < 3) { // Next 2 picks go to B
+                    currentTeam = 'B';
+                } else if (totalPicks < 5) { // Next 2 picks go to A
+                    currentTeam = 'A';
+                } else if (totalPicks < 7) { // Next 2 picks go to B
+                    currentTeam = 'B';
+                } else { // Last pick goes to A
+                    currentTeam = 'A';
+                }
             }
             
             updateStatusMessage();
