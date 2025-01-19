@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://supervive.wiki.gg/images/4/4a/Site-favicon.ico">
+    <title>SUPERVIVE Arena Draft</title>
+    <style>
+        /* Base styles */
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+
+        /* Layout */
+        .container {
+            display: grid;
+            grid-template-columns: 250px 1fr 250px;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            align-items: start;
+        }
+
+        .middle-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 10px;
+            right: 50%;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 8px;
+        }
+
+        /* Team sections */
+        .team {
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        #team-a {
+            background: rgba(0, 0, 255, 0.2);
+            border: 2px solid #0066cc;
+        }
+
+        #team-b {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #cc0000;
+        }
+
+        /* Character pool */
+        .character-pool {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        /* Character cards */
+        .character {
+            position: relative;
+            padding: 10px;
+            border-radius: 5px;
+            background: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .character img {
+            width: 64px;
+            height: 64px;
+        }
+
+        .character:hover {
+            transform: scale(1.05);
+        }
+
+        .character.selected {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .character.banned {
+            background: #ff0000;
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+
+        .character.team-a-previous {
+            border-left: 2px solid rgba(0, 102, 204, 0.3);
+            border-top: 2px solid rgba(0, 102, 204, 0.3);
+            cursor: not-allowed;
+        }
+
+        .character.team-b-previous {
+            border-right: 2px solid rgba(204, 0, 0, 0.3);
+            border-bottom: 2px solid rgba(204, 0, 0, 0.3);
+            cursor: not-allowed;
+        }
+
+        .character.team-a-current {
+            border: 2px solid #0066cc;
+        }
+
+        .character.team-b-current {
+            border: 2px solid #cc0000;
+        }
+
+        /* Auto-selected overlay */
+        .character.auto-selected::after {
+            content: '🕒';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            background: rgba(0, 0, 0, 0.5);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px;
+        }
+
+        /* UI Elements */
+        .timer {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+
+        .edit-team-name {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+            margin-left: 8px;
+            opacity: 0.6;
+            transition: opacity 0.3s;
+        }
+
+        .edit-team-name:hover {
+            opacity: 1;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Draft status section */
+        .draft-status {
+            text-align: left;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* Mode selection */
+        .mode-select {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .mode-toggle {
+            position: relative;
+            width: 200px;
+            height: 40px;
+            background: #333;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            border: 2px solid #4CAF50;
+        }
+
+        .mode-toggle button {
+            flex: 1;
+            height: 100%;
+            border-radius: 0;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: transparent;
+            color: white;
+            z-index: 1;
+            position: relative;
+        }
+
+        .mode-toggle::before {
+            content: '';
+            position: absolute;
+            width: 50%;
+            height: 100%;
+            background: rgba(76, 175, 80, 0.2);
+            transition: transform 0.3s ease;
+            left: 0;
+        }
+
+        .mode-toggle.normal::before {
+            transform: translateX(0);
+        }
+
+        .mode-toggle.fearless::before {
+            transform: translateX(100%);
+        }
+
+        /* Controls */
+        .controls-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ban-select {
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        #start-draft {
+            margin-left: 10px;
+        }
+
+        #skip-ban {
+            margin: 0;
+            padding: 8px 16px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+        }
+
+        #skip-ban:hover {
+            background: #555;
+        }
+
+        #skip-ban.visible {
+            display: inline-block;
+        }
+
+        /* Utility classes */
+        .hidden {
+            display: none;
+        }
+
+        .team-name-input.hidden {
+            display: none;
+        }
+
+        /* Match history */
+        .match-history {
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+
+        .match-history h4 {
+            margin: 5px 0;
+        }
+
+        .match-history .picks {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .match-history .picks img {
+            width: 30px;
+            height: 30px;
+            border-radius: 3px;
+        }
+
+        /* Game counter */
+        .game-counter {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 1.2em;
+            color: #666;
+        }
+
+        #status-message {
+            display: inline-block;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="team-a" class="team">
+            <h2 id="team-a-heading">Team A <button class="edit-team-name">✎</button></h2>
+            <div class="timer" id="team-a-timer"></div>
+            <div id="team-a-picks"></div>
+        </div>
+
+        <div class="middle-section">
+            <div class="draft-status">
+                <div class="controls-wrapper">
+                    <div class="mode-toggle">
+                        <button id="normal-mode">Normal</button>
+                        <button id="fearless-mode">Fearless</button>
+                    </div>
+                    <button id="start-draft">Start Draft</button>
+                    <div id="ban-select" class="ban-select hidden">
+                        <label>Bans per team:&nbsp;</label>
+                        <select id="ban-count">
+                            <option value="0">0</option>
+                            <option value="2" selected>1</option>
+                            <option value="4">2</option>
+                        </select>
+                    </div>
+                    <div id="game-counter" class="hidden">Game #0</div>
+                    <div id="status-message"></div>
+                    <button id="skip-ban">Pass Ban</button>
+                </div>
+            </div>
+            <div class="character-pool" id="character-pool"></div>
+        </div>
+
+        <div id="team-b" class="team">
+            <h2 id="team-b-heading">Team B <button class="edit-team-name">✎</button></h2>
+            <div class="timer" id="team-b-timer"></div>
+            <div id="team-b-picks"></div>
+        </div>
+    </div>
+    <div class="footer">from <b>RX</b> with ❤️</div>
+
+    <script>
+        const characters = [
+            {name: 'Beebo', icon: 'https://supervive.wiki.gg/images/thumb/a/af/PortBeebo.png/200px-PortBeebo.png'},
+            {name: 'Bishop', icon: 'https://supervive.wiki.gg/images/thumb/b/be/PortBishop.png/200px-PortBishop.png'},
+            {name: 'Brall', icon: 'https://supervive.wiki.gg/images/thumb/f/fd/PortBrall.png/200px-PortBrall.png'},
+            {name: 'Celeste', icon: 'https://supervive.wiki.gg/images/thumb/5/53/PortCeleste.png/200px-PortCeleste.png'},
+            {name: 'Elluna', icon: 'https://supervive.wiki.gg/images/thumb/d/d3/PortElluna.png/200px-PortElluna.png'},
+            {name: 'Felix', icon: 'https://supervive.wiki.gg/images/thumb/4/47/PortFelix.png/200px-PortFelix.png'},
+            {name: 'Ghost', icon: 'https://supervive.wiki.gg/images/thumb/1/19/PortGhost.png/200px-PortGhost.png'},
+            {name: 'Hudson', icon: 'https://supervive.wiki.gg/images/thumb/e/e6/PortHudson.png/200px-PortHudson.png'},
+            {name: 'Jin', icon: 'https://supervive.wiki.gg/images/thumb/7/74/PortJin.png/200px-PortJin.png'},
+            {name: 'Joule', icon: 'https://supervive.wiki.gg/images/thumb/4/46/PortJoule.png/200px-PortJoule.png'},
+            {name: 'Kingpin', icon: 'https://supervive.wiki.gg/images/thumb/1/11/PortKingpin.png/200px-PortKingpin.png'},
+            {name: 'Myth', icon: 'https://supervive.wiki.gg/images/thumb/c/c1/PortMyth.png/200px-PortMyth.png'},
+            {name: 'Oath', icon: 'https://supervive.wiki.gg/images/thumb/2/2e/PortOath.png/200px-PortOath.png'},
+            {name: 'Shiv', icon: 'https://supervive.wiki.gg/images/thumb/d/d6/PortShiv.png/200px-PortShiv.png'},
+            {name: 'Shrike', icon: 'https://supervive.wiki.gg/images/thumb/4/40/PortShrike.png/200px-PortShrike.png'},
+            {name: 'Void', icon: 'https://supervive.wiki.gg/images/thumb/6/65/PortVoid.png/200px-PortVoid.png'},
+            {name: 'Zeph', icon: 'https://supervive.wiki.gg/images/thumb/9/93/PortZeph.png/200px-PortZeph.png'}
+        ];
+
+        let currentPhase = 'setup';
+        let currentTeam = 'A';
+        let timeLeft = 30;
+        let timer = null;
+        let teamAPicks = [];
+        let teamBPicks = [];
+        let bannedCharacters = [];
+        let gameMode = null;
+        let maxBans = parseInt(document.getElementById('ban-count').value);
+        let gameCounter = 0;
+        let draftActive = false;
+        let autoSelectedChars = new Set();
+        
+        // Only used in Fearless mode
+        let teamAHistory = new Set();
+        let teamBHistory = new Set();
+
+        function initializeCharacterPool() {
+            const pool = document.getElementById('character-pool');
+            pool.innerHTML = '';
+            characters.forEach(char => {
+                const charDiv = document.createElement('div');
+                charDiv.className = 'character';
+                if (gameMode === 'fearless') {
+                    if (teamAHistory.has(char.name)) {
+                        charDiv.classList.add('team-a-previous');
+                    }
+                    if (teamBHistory.has(char.name)) {
+                        charDiv.classList.add('team-b-previous');
+                    }
+                }
+                
+                const img = document.createElement('img');
+                img.src = char.icon;
+                img.alt = char.name;
+                charDiv.appendChild(img);
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = char.name;
+                charDiv.appendChild(nameSpan);
+                
+                charDiv.onclick = () => selectCharacter(char.name);
+                pool.appendChild(charDiv);
+            });
+
+            document.querySelectorAll('.edit-team-name').forEach(button => {
+                button.onclick = (e) => {
+                    const heading = e.target.parentElement;
+                    const team = heading.id.includes('a') ? 'A' : 'B';
+                    const currentName = heading.textContent.replace('✎', '').trim();
+                    const newName = prompt(`Enter new name for Team ${team}:`, currentName);
+                    if (newName) {
+                        heading.innerHTML = `${newName} <button class="edit-team-name">✎</button>`;
+                    }
+                };
+            });
+
+            const skipBanBtn = document.getElementById('skip-ban');
+            skipBanBtn.onclick = () => {
+                if (currentPhase === 'ban') {
+                    bannedCharacters.push(null);
+                    nextPhase();
+                }
+            };
+
+            // Mode selection handlers
+            document.getElementById('normal-mode').onclick = () => {
+                gameMode = 'normal';
+                document.getElementById('ban-select').classList.remove('hidden');
+                document.querySelector('.mode-toggle').classList.remove('fearless');
+                document.getElementById('start-draft').disabled = false;
+                document.getElementById('game-counter').classList.add('hidden');
+            };
+
+            document.getElementById('fearless-mode').onclick = () => {
+                gameMode = 'fearless';
+                document.getElementById('ban-select').classList.add('hidden');
+                document.querySelector('.mode-toggle').classList.add('fearless');
+                document.getElementById('start-draft').disabled = false;
+                maxBans = 2;
+                document.getElementById('game-counter').classList.remove('hidden');
+            };
+        }
+
+        function startTimer() {
+            timeLeft = 30;
+            updateTimerDisplay();
+            clearInterval(timer);
+            timer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    if (currentPhase === 'ban') {
+                        nextPhase();
+                    } else {
+                        autoSelect();
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const timerElement = document.getElementById(`team-${currentTeam.toLowerCase()}-timer`);
+            timerElement.textContent = `Time: ${timeLeft}s`;
+        }
+
+        function autoSelect() {
+            const availableCharacters = characters.filter(char => {
+                const isAvailableThisRound = !teamAPicks.includes(char.name) && 
+                    !teamBPicks.includes(char.name) && 
+                    !bannedCharacters.includes(char.name);
+                
+                if (gameMode === 'normal') return isAvailableThisRound;
+                
+                const isAvailableHistorically = currentTeam === 'A' ? 
+                    !teamAHistory.has(char.name) : 
+                    !teamBHistory.has(char.name);
+                return isAvailableThisRound && isAvailableHistorically;
+            });
+            if (availableCharacters.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableCharacters.length);
+                const selectedChar = availableCharacters[randomIndex].name;
+                autoSelectedChars.add(selectedChar);
+                selectCharacter(selectedChar);
+            }
+        }
+
+        function selectCharacter(char) {
+            if (!draftActive) return;
+            
+            if (currentPhase === 'ban') {
+                if (!bannedCharacters.includes(char)) {
+                    bannedCharacters.push(char);
+                    updateCharacterPool();
+                    nextPhase();
+                }
+            } else if (currentPhase === 'pick') {
+                let canSelect = true;
+                if (gameMode === 'fearless') {
+                    canSelect = currentTeam === 'A' ? 
+                        !teamAHistory.has(char) : 
+                        !teamBHistory.has(char);
+                }
+                
+                if (!teamAPicks.includes(char) && !teamBPicks.includes(char) && 
+                    !bannedCharacters.includes(char) && canSelect) {
+                    if (currentTeam === 'A') {
+                        teamAPicks.push(char);
+                        if (gameMode === 'fearless') teamAHistory.add(char);
+                    } else {
+                        teamBPicks.push(char);
+                        if (gameMode === 'fearless') teamBHistory.add(char);
+                    }
+                    updateCharacterPool();
+                    updateTeamDisplay();
+                    nextPhase();
+                }
+            }
+        }
+
+        function updateCharacterPool() {
+            const pool = document.getElementById('character-pool');
+            pool.childNodes.forEach(charDiv => {
+                const charName = charDiv.querySelector('span').textContent;
+                charDiv.className = 'character';
+                
+                if (gameMode === 'fearless') {
+                    if (teamAHistory.has(charName)) {
+                        charDiv.classList.add('team-a-previous');
+                    }
+                    if (teamBHistory.has(charName)) {
+                        charDiv.classList.add('team-b-previous');
+                    }
+                }
+                
+                if (bannedCharacters.includes(charName)) {
+                    charDiv.classList.add('banned');
+                }
+                if (teamAPicks.includes(charName)) {
+                    charDiv.classList.add('selected');
+                    charDiv.classList.add('team-a-current');
+                }
+                if (teamBPicks.includes(charName)) {
+                    charDiv.classList.add('selected');
+                    charDiv.classList.add('team-b-current');
+                }
+            });
+        }
+
+        function updateTeamDisplay() {
+            const teamADiv = document.getElementById('team-a-picks');
+            const teamBDiv = document.getElementById('team-b-picks');
+            
+            teamADiv.innerHTML = teamAPicks.map(charName => {
+                const char = characters.find(c => c.name === charName);
+                const autoSelectedClass = autoSelectedChars.has(charName) ? 'auto-selected' : '';
+                return `<div class="character ${autoSelectedClass}">
+                    <img src="${char.icon}" alt="${char.name}">
+                    <span>${char.name}</span>
+                </div>`;
+            }).join('');
+            
+            teamBDiv.innerHTML = teamBPicks.map(charName => {
+                const char = characters.find(c => c.name === charName);
+                const autoSelectedClass = autoSelectedChars.has(charName) ? 'auto-selected' : '';
+                return `<div class="character ${autoSelectedClass}">
+                    <img src="${char.icon}" alt="${char.name}">
+                    <span>${char.name}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function nextPhase() {
+            clearInterval(timer);
+            if (currentPhase === 'ban') {
+                if (bannedCharacters.length === maxBans) {
+                    currentPhase = 'pick';
+                    currentTeam = 'A';
+                } else {
+                    currentTeam = currentTeam === 'A' ? 'B' : 'A';
+                }
+            } else if (currentPhase === 'pick') {
+                if (teamAPicks.length === 4 && teamBPicks.length === 4) {
+                    endDraft();
+                    return;
+                }
+                currentTeam = currentTeam === 'A' ? 'B' : 'A';
+            }
+            
+            updateStatusMessage();
+            startTimer();
+            
+            const skipBanBtn = document.getElementById('skip-ban');
+            skipBanBtn.style.display = currentPhase === 'ban' ? 'inline-block' : 'none';
+        }
+
+        function updateStatusMessage() {
+            const message = document.getElementById('status-message');
+            const teamHeading = document.getElementById(`team-${currentTeam.toLowerCase()}-heading`);
+            const teamName = teamHeading.textContent.replace('✎', '').trim();
+            message.textContent = `${teamName} ${currentPhase}`;
+        }
+
+        function endDraft() {
+            draftActive = false;
+            const message = document.getElementById('status-message');
+            message.textContent = 'Draft Complete!';
+            document.getElementById('start-draft').disabled = false;
+            document.getElementById('skip-ban').style.display = 'none';
+            document.getElementById('normal-mode').disabled = false;
+            document.getElementById('fearless-mode').disabled = false;
+            if (gameMode === 'normal') {
+                document.getElementById('ban-select').classList.remove('hidden');
+            }
+            
+        }
+
+        document.getElementById('start-draft').onclick = () => {
+            if (!gameMode) {
+                alert('Please select a game mode first!');
+                return;
+            }
+            
+            if (gameMode === 'normal') {
+                maxBans = parseInt(document.getElementById('ban-count').value);
+            }
+            if (gameMode === 'fearless') {
+                gameCounter++;
+                document.getElementById('game-counter').textContent = `Game #${gameCounter}`;
+            }
+            
+            currentPhase = 'ban';
+            currentTeam = 'A';
+            teamAPicks = [];
+            teamBPicks = [];
+            bannedCharacters = [];
+            autoSelectedChars = new Set();
+            draftActive = true;
+            document.getElementById('start-draft').disabled = true;
+            document.getElementById('normal-mode').disabled = true;
+            document.getElementById('fearless-mode').disabled = true;
+            document.getElementById('ban-select').classList.add('hidden');
+            updateStatusMessage();
+            startTimer();
+            updateCharacterPool();
+            updateTeamDisplay();
+            document.getElementById('skip-ban').style.display = 'inline-block';
+        };
+        
+        initializeCharacterPool();
+    </script>
+</body>
+</html>
