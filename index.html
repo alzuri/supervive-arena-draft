@@ -254,6 +254,11 @@
             align-items: center;
             gap: 10px;
         }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
         .ban-select {
             margin: 0;
@@ -348,29 +353,36 @@
         <div class="middle-section">
             <div class="draft-status">
                 <div class="controls-wrapper">
-                    <div class="mode-toggle">
-                        <button id="normal-mode">Normal</button>
-                        <button id="fearless-mode">Fearless</button>
-                    </div>
-                    <button id="start-draft">Start Draft</button>
-                    <div id="exclusivity-select" class="exclusivity-select hidden">
-                        <label>
-                            Hunter exclusivity
-                            <input type="checkbox" id="hunter-exclusivity" checked>
-                        </label>
-                    </div>
-                    <div id="ban-select" class="ban-select hidden">
-                        <label>Bans per team:&nbsp;</label>
-                        <select id="ban-count">
-                            <option value="0">0</option>
-                            <option value="2" selected>1</option>
-                            <option value="4">2</option>
-                        </select>
+                    <div class="controls">
+                        <div class="mode-toggle">
+                            <button id="normal-mode">Normal</button>
+                            <button id="fearless-mode">Fearless</button>
+                        </div>
+                        <button id="start-draft">Start Draft</button>
+                        <div id="timer-select" class="hidden">
+                            <label>Enable Timer</label>
+                            <input type="checkbox" id="enable-timer" unchecked>
+                        </div>
+                        <div id="exclusivity-select" class="exclusivity-select hidden">
+                            <label>
+                                Hunter exclusivity
+                                <input type="checkbox" id="hunter-exclusivity" checked>
+                            </label>
+                        </div>
+                        <div id="ban-select" class="ban-select hidden">
+                            <label>Bans per team:&nbsp;</label>
+                            <select id="ban-count">
+                                <option value="0">0</option>
+                                <option value="2" selected>1</option>
+                                <option value="4">2</option>
+                            </select>
+                        </div>
                     </div>
                     <div id="game-counter" class="hidden">Game #0</div>
                     <div id="status-message"></div>
                     <button id="skip-ban">Pass Ban</button>
                 </div>
+                
             </div>
             <div class="character-pool" id="character-pool"></div>
         </div>
@@ -417,6 +429,7 @@
         let draftActive = false;
         let autoSelectedChars = new Set();
         let hunterExclusivity = true;
+        let timerEnabled = false; // New variable to track timer state
         
         // Only used in Fearless mode
         let teamAHistory = new Set();
@@ -473,19 +486,22 @@
             // Mode selection handlers
             document.getElementById('normal-mode').onclick = () => {
                 gameMode = 'normal';
+                document.getElementById('start-draft').disabled = false;
+                document.querySelector('.mode-toggle').classList.remove('fearless');
                 document.getElementById('ban-select').classList.remove('hidden');
                 document.getElementById('exclusivity-select').classList.remove('hidden');
-                document.querySelector('.mode-toggle').classList.remove('fearless');
-                document.getElementById('start-draft').disabled = false;
                 document.getElementById('game-counter').classList.add('hidden');
+                document.getElementById('timer-select').classList.remove('hidden');
             };
 
             document.getElementById('fearless-mode').onclick = () => {
                 gameMode = 'fearless';
+                document.getElementById('start-draft').disabled = false;
                 document.getElementById('ban-select').classList.add('hidden');
                 document.getElementById('exclusivity-select').classList.remove('hidden');
                 document.querySelector('.mode-toggle').classList.add('fearless');
-                document.getElementById('start-draft').disabled = false;
+                document.getElementById('timer-select').classList.remove('hidden');
+                
                 maxBans = 2;
             };
 
@@ -494,9 +510,20 @@
                     hunterExclusivity = e.target.checked;
                 }
             };
+
+            // Timer enable/disable handler
+            document.getElementById('enable-timer').onchange = (e) => {
+                timerEnabled = e.target.checked;
+                if (!timerEnabled) {
+                    clearInterval(timer);
+                    document.getElementById('team-a-timer').textContent = '';
+                    document.getElementById('team-b-timer').textContent = '';
+                }
+            };
         }
 
         function startTimer() {
+            if (!timerEnabled) return; // Only start timer if enabled
             timeLeft = 30;
             updateTimerDisplay();
             clearInterval(timer);
@@ -698,7 +725,9 @@
                 document.getElementById('ban-select').classList.remove('hidden');
             }
             document.getElementById('exclusivity-select').classList.remove('hidden');
+            document.getElementById('timer-select').classList.remove('hidden');
             document.getElementById('hunter-exclusivity').disabled = false;
+            document.getElementById('enable-timer').disabled = false;
         }
 
         document.getElementById('start-draft').onclick = () => {
@@ -728,6 +757,7 @@
             document.getElementById('fearless-mode').disabled = true;
             document.getElementById('ban-select').classList.add('hidden');
             document.getElementById('hunter-exclusivity').disabled = true;
+            document.getElementById('enable-timer').disabled = true;
             updateStatusMessage();
             startTimer();
             updateCharacterPool();
