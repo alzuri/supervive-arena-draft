@@ -8,7 +8,6 @@ body {
 
 .container {
     display: grid;
-    /* grid-template-columns: 130px auto 130px; */
     grid-template-columns: 1fr 2fr 1fr;
     gap: 20px;
     max-width: 1400px;
@@ -20,12 +19,13 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    max-height: calc(100vh - 10%);
 }
 
 .footer {
-    position: fixed;
-    bottom: 10px;
-    right: 50%;
+    position: sticky;
+    text-align: center;
+    bottom: 0;
     color: rgba(255, 255, 255, 0.5);
     font-size: 8px;
 }
@@ -34,7 +34,8 @@ body {
     padding: 20px;
     border-radius: 10px;
     text-align: center;
-    /* max-width: fit-content; */
+    min-width: 100px;
+    font-size: 20px;
 }
 
 #team-a {
@@ -47,17 +48,23 @@ body {
     border: 3px solid #cc0000;
 }
 
-.character-pool {
+#character-pool {
     display: grid;
     grid-template-columns: repeat(6, minmax(100px, 1fr));
     gap: 10px;
-    padding: 20px;
+    padding: 10px;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
+    overflow-y: auto;
 }
-@media (max-width: 1000px) { /* Adjust the max-width as needed */
-    .character-pool {
-        grid-template-columns: repeat(3, minmax(100px, 1fr)); /* 3 columns for medium screens */
+@media (max-width: 1045px) {
+    #character-pool {
+        grid-template-columns: repeat(4, minmax(100px, 1fr));
+    }
+}
+@media (max-width: 800px) {
+    #character-pool {
+        grid-template-columns: repeat(3, minmax(100px, 1fr));
     }
 }
 
@@ -65,7 +72,6 @@ body {
     position: relative;
     padding: 10px;
     border-radius: 5px;
-    /* background: #333; */
     cursor: pointer;
     transition: all 0.3s ease;
     display: flex;
@@ -114,6 +120,18 @@ body {
     cursor: not-allowed;
 }
 
+.character.team-a-picked {
+    background: linear-gradient(to right, rgba(0, 0, 255, 0.2), rgba(255, 255, 255, 0.0));
+    opacity: 0.8;
+    cursor: not-allowed;
+}
+
+.character.team-b-picked {
+    background: linear-gradient(to left, rgba(255, 0, 0, 0.2), rgba(255, 255, 255, 0.0));
+    opacity: 0.9;
+    cursor: not-allowed;
+}
+
 .character.auto-selected::after {
     content: '🕒';
     position: absolute;
@@ -130,8 +148,15 @@ body {
     border-radius: 5px;
 }
 
+.character.picked img {
+    /* width: 100px;
+    height: 100px; */
+    width: calc(15vh);
+    height: calc(15vh);
+}
+
 .timer {
-    font-size: 24px;
+    font-size: 14px;
     margin: 10px 0;
 }
 
@@ -324,4 +349,12 @@ button:disabled {
     padding: 0;
     text-decoration: underline;
     transition: background 0.3s ease;
+}
+#config {
+    position: fixed;
+    z-index: 2;
+    background-color: #1a1a1a;
+    border: 3px solid #4CAF50;
+    min-width: 200px;
+    padding-left: 10px;
 }

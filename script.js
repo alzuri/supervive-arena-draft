@@ -235,13 +235,13 @@ function updateCharacterPool() {
             if (hunterExclusivity) {
                 charDiv.classList.add('selected');
             }
-            charDiv.classList.add('team-a-previous');
+            charDiv.classList.add('team-a-picked');
         }
         if (teamBPicks.includes(charName)) {
             if (hunterExclusivity) {
                 charDiv.classList.add('selected');
             }
-            charDiv.classList.add('team-b-previous');
+            charDiv.classList.add('team-b-picked');
         }
     });
 }
@@ -253,7 +253,7 @@ function updateTeamDisplay() {
     teamADiv.innerHTML = teamAPicks.map(charName => {
         const char = characters.find(c => c.name === charName);
         const autoSelectedClass = autoSelectedChars.has(charName) ? 'auto-selected' : '';
-        return `<div class="character ${autoSelectedClass}">
+        return `<div class="character picked ${autoSelectedClass}">
             <img src="${char.icon}" alt="${char.name}">
             <span>${char.name}</span>
         </div>`;
@@ -262,7 +262,7 @@ function updateTeamDisplay() {
     teamBDiv.innerHTML = teamBPicks.map(charName => {
         const char = characters.find(c => c.name === charName);
         const autoSelectedClass = autoSelectedChars.has(charName) ? 'auto-selected' : '';
-        return `<div class="character ${autoSelectedClass}">
+        return `<div class="character picked ${autoSelectedClass}">
             <img src="${char.icon}" alt="${char.name}">
             <span>${char.name}</span>
         </div>`;
