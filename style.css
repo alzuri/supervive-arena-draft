@@ -306,6 +306,8 @@ button:disabled {
     display: flex;
     flex-direction: column;
     cursor: pointer;
+    color: rgb(56, 56, 56);
+    font-size: 10px;
 }
 
 .match, #match-history {
@@ -317,6 +319,8 @@ button:disabled {
     border-radius: 5px;
     display: flex;
     flex-direction: column;
+    color: white;
+    font-size: 12px;
 }
 
 .match {

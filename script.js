@@ -231,10 +231,10 @@ function createMatchHistory() {
 
 function recordMatchHistory(team, phase, character) {
     if (phase === 'ban') {
-        matchHistory.push(`${team}0 ${character}.`);
+        matchHistory.push(`${team}0 ${character}. `);
     } else if (phase === 'pick') {
         const pickIndex = currentTeam === 'A' ? teamAPicks.length : teamBPicks.length;
-        matchHistory.push(`${team}${pickIndex} ${character}.`);
+        matchHistory.push(`${team}${pickIndex} ${character}. `);
     }
     updateMatchHistoryDisplay();
 }
@@ -242,7 +242,7 @@ function recordMatchHistory(team, phase, character) {
 function updateMatchHistoryDisplay() {
     const draftId = gameMode === 'normal' ? `draft${gameCounter}` : `fdraft${fearlessGameCounter}`;
     const historyContainer = document.getElementById(`${draftId}`);
-    historyContainer.innerHTML += `<div>${matchHistory[matchHistory.length - 1]}</div>`;
+    historyContainer.innerHTML += `${matchHistory[matchHistory.length - 1]}`;
 }
 
 function updateCharacterPool() {
