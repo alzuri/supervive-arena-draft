@@ -26,9 +26,11 @@ let timer = null;
 let teamAPicks = [];
 let teamBPicks = [];
 let bannedCharacters = [];
+let matchHistory = [];
 let gameMode = 'normal';
 let maxBans = parseInt(document.getElementById('ban-count').value);
 let gameCounter = 0;
+let fearlessGameCounter = 0;
 let draftActive = false;
 let autoSelectedChars = new Set();
 let hunterExclusivity = true;
@@ -179,6 +181,7 @@ function selectCharacter(char) {
     if (currentPhase === 'ban') {
         if (!bannedCharacters.includes(char)) {
             bannedCharacters.push(char);
+            recordMatchHistory(currentTeam, currentPhase, char);
             updateCharacterPool();
             nextPhase();
         }
@@ -206,11 +209,40 @@ function selectCharacter(char) {
                 teamBPicks.push(char);
                 if (gameMode === 'fearless') teamBHistory.add(char);
             }
+            recordMatchHistory(currentTeam, currentPhase, char);
             updateCharacterPool();
             updateTeamDisplay();
             nextPhase();
         }
     }
+}
+
+function createMatchHistory() {
+    const draftId = gameMode === 'normal' ? `draft${gameCounter}` : `fdraft${fearlessGameCounter}`;
+    const historyContainer = document.getElementById('match-history');
+    
+    const newDraftDiv = document.createElement('div');
+    newDraftDiv.id = draftId;
+    newDraftDiv.innerHTML = gameMode === 'normal' ? `Draft ${gameCounter}: ` : `FDraft ${fearlessGameCounter}: `;
+    newDraftDiv.setAttribute('class', 'match')
+    
+    historyContainer.appendChild(newDraftDiv);
+}
+
+function recordMatchHistory(team, phase, character) {
+    if (phase === 'ban') {
+        matchHistory.push(`${team}0 ${character}.`);
+    } else if (phase === 'pick') {
+        const pickIndex = currentTeam === 'A' ? teamAPicks.length : teamBPicks.length;
+        matchHistory.push(`${team}${pickIndex} ${character}.`);
+    }
+    updateMatchHistoryDisplay();
+}
+
+function updateMatchHistoryDisplay() {
+    const draftId = gameMode === 'normal' ? `draft${gameCounter}` : `fdraft${fearlessGameCounter}`;
+    const historyContainer = document.getElementById(`${draftId}`);
+    historyContainer.innerHTML += `<div>${matchHistory[matchHistory.length - 1]}</div>`;
 }
 
 function updateCharacterPool() {
@@ -333,11 +365,12 @@ document.getElementById('start-draft').onclick = () => {
     }
     
     if (gameMode === 'normal') {
+        gameCounter++
         maxBans = parseInt(document.getElementById('ban-count').value);
     }
     if (gameMode === 'fearless') {
-        gameCounter++;
-        document.getElementById('game-counter').textContent = `Game #${gameCounter}`;
+        fearlessGameCounter++;
+        document.getElementById('game-counter').textContent = `Game #${fearlessGameCounter}`;
         document.getElementById('game-counter').classList.remove('hidden');
     }
     
@@ -346,6 +379,7 @@ document.getElementById('start-draft').onclick = () => {
     teamAPicks = [];
     teamBPicks = [];
     bannedCharacters = [];
+    matchHistory = [];
     autoSelectedChars = new Set();
     draftActive = true;
     document.getElementById('start-draft').disabled = true;
@@ -360,6 +394,7 @@ document.getElementById('start-draft').onclick = () => {
     updateCharacterPool();
     updateTeamDisplay();
     document.getElementById('skip-ban').style.display = 'inline-block';
+    createMatchHistory();
 };
 
 initializeCharacterPool();

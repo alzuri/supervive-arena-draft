@@ -23,11 +23,12 @@ body {
 }
 
 .footer {
-    position: sticky;
+    position: fixed;
     text-align: center;
     bottom: 0;
     color: rgba(255, 255, 255, 0.5);
-    font-size: 8px;
+    font-size: 10px;
+    width: 100%;
 }
 
 .team {
@@ -57,11 +58,13 @@ body {
     border-radius: 10px;
     overflow-y: auto;
 }
+
 @media (max-width: 1045px) {
     #character-pool {
         grid-template-columns: repeat(4, minmax(100px, 1fr));
     }
 }
+
 @media (max-width: 800px) {
     #character-pool {
         grid-template-columns: repeat(3, minmax(100px, 1fr));
@@ -86,7 +89,14 @@ body {
 }
 
 .character:hover {
-    transform: scale(1.05);
+    box-shadow: 2px 2px 2px 2px #f934d0;
+    animation: blinking 1s infinite;
+}
+
+@keyframes blinking {
+    50% {
+        box-shadow: 2px 2px 2px 2px #9724f0;
+    }
 }
 
 .character.selected {
@@ -94,9 +104,7 @@ body {
     cursor: not-allowed;
 }
 
-.character.selected img {
-    opacity: 0.3;
-}
+.character.selected img,
 .character.selected span {
     opacity: 0.3;
 }
@@ -149,8 +157,6 @@ body {
 }
 
 .character.picked img {
-    /* width: 100px;
-    height: 100px; */
     width: calc(15vh);
     height: calc(15vh);
 }
@@ -252,23 +258,13 @@ button:disabled {
     transform: translateX(100%);
 }
 
-.controls-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.controls {
+.controls-wrapper, .controls {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.ban-select {
-    margin: 0;
-    display: inline-flex;
-    align-items: center;
-}
-
+.ban-select,
 .exclusivity-select {
     margin: 0;
     display: inline-flex;
@@ -306,27 +302,25 @@ button:disabled {
     display: none;
 }
 
-.match-history {
-    margin-top: 20px;
-    padding: 10px;
-    background: rgba(0,0,0,0.1);
-    border-radius: 5px;
-}
-
-.match-history h4 {
-    margin: 5px 0;
-}
-
-.match-history .picks {
+#match-history-container {
     display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    cursor: pointer;
 }
 
-.match-history .picks img {
-    width: 30px;
-    height: 30px;
-    border-radius: 3px;
+.match, #match-history {
+    margin-top: 20px;
+    margin: 5px 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    cursor: default;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+}
+
+.match {
+    flex-direction: row;
 }
 
 .game-counter {
@@ -350,6 +344,7 @@ button:disabled {
     text-decoration: underline;
     transition: background 0.3s ease;
 }
+
 #config {
     position: fixed;
     z-index: 2;
