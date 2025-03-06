@@ -16,7 +16,8 @@ const characters = [
     {name: 'Shiv', icon: 'https://supervive.wiki.gg/images/thumb/d/d6/PortShiv.png/200px-PortShiv.png'},
     {name: 'Shrike', icon: 'https://supervive.wiki.gg/images/thumb/4/40/PortShrike.png/200px-PortShrike.png'},
     {name: 'Void', icon: 'https://supervive.wiki.gg/images/thumb/6/65/PortVoid.png/200px-PortVoid.png'},
-    {name: 'Zeph', icon: 'https://supervive.wiki.gg/images/thumb/9/93/PortZeph.png/200px-PortZeph.png'}
+    {name: 'Zeph', icon: 'https://supervive.wiki.gg/images/thumb/9/93/PortZeph.png/200px-PortZeph.png'},
+    {name: 'Saros', icon: 'https://supervive.wiki.gg/images/thumb/1/13/ComingSoonTM.png/199px-ComingSoonTM.png'}
 ];
 
 let currentPhase = 'setup';
