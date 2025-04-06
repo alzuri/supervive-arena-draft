@@ -51,7 +51,7 @@ body {
 
 #character-pool {
     display: grid;
-    grid-template-columns: repeat(6, minmax(100px, 1fr));
+    grid-template-columns: repeat(5, minmax(100px, 1fr));
     gap: 10px;
     padding: 10px;
     background: rgba(255, 255, 255, 0.1);
