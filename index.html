@@ -17,23 +17,17 @@
 <body>
     <div class="container">
         <div id="team-a" class="team">
-            <b><div id="team-a-heading">Team A <button class="edit-team-name">✎</button></div></b>
-            <div class="timer" id="team-a-timer"></div>
+            <div class="team-top">
+                <b><div id="team-a-heading" class="team-heading">Team A <button id="team-action" class="edit-team-name">✎</button></div></b>
+                <div id="team-a-captain"></div>
+            </div>
             <div id="team-a-picks"></div>
         </div>
         <div class="middle-section">
             <div class="draft-status">
                 <div class="controls-wrapper">
                     <div class="controls">
-                        <div class="mode-toggle">
-                            <button id="normal-mode">Normal</button>
-                            <button id="fearless-mode">Fearless</button>
-                        </div>
                         <div id="config" class="hidden">
-                            <div id="timer-select">
-                                <label>Enable Timer</label>
-                                <input type="checkbox" id="enable-timer" unchecked>
-                            </div>
                             <div id="exclusivity-select" class="exclusivity-select">
                                 <label>
                                     Hunter exclusivity
@@ -47,31 +41,53 @@
                                     <option value="0">0</option>
                                     <option value="2" selected>1</option>
                                     <option value="4">2</option>
+                                    <option value="6">3</option>
                                 </select>
                             </div>
                         </div>
                     </div>
                     <div id="game-counter" class="hidden">Game #0</div>
-                    <div id="status-message"></div>
+                    <div id="status-message"></div><br>
+                    <div id="notifications"></div>
                 </div>
                 <br>
-                <button id="config-button">config</button>
+                <button id="create-room-button">Create Room</button>
+                <button id="join-room-button">Join Room</button>
+                <button id="reconnect-button" class="hidden">Reconnect</button>
+                <button id="cancel-session-button" class="hidden">Cancel</button>
+                <div id="join-room-input-container" class="hidden">
+                    <form id="join-room-form">
+                        <input type="password" id="room-code-input" placeholder="Enter Room Code">
+                        <button id="enter-button" type="submit">Enter</button>
+                    </form>
+                </div>
+                <button id="config-button">Config</button>
+                <button id="ready-button" class="hidden">Ready Up</button>
+                <button id="skip-ban">Skip Ban</button>
                 <button id="start-draft">Start Draft</button>
-                <button id="skip-ban">Pass Ban</button>
+                <button id="leave-room-button" class="hidden">Leave Room</button>
             </div>
             <div id="character-pool"></div>
-            <details id="match-history-container">
-                <summary>Match History</summary>
-                <div id="match-history"></div>
-            </details>
+            <div id="history-spectator">
+                <details id="match-history-container">
+                    <summary>Match History</summary>
+                    <div id="match-history"></div>
+                </details>
+                <details id="spectator-list-container">
+                    <summary>Spectators</summary>
+                    <div id="spectator-list"></div>
+                </details>
+            </div>
         </div>
         <div id="team-b" class="team">
-            <b><div id="team-b-heading">Team B <button class="edit-team-name">✎</button></div></b>
-            <div class="timer" id="team-b-timer"></div>
+            <div class="team-top">
+                <b><div id="team-b-heading" class="team-heading">Team B <button id="team-action" class="edit-team-name">✎</button></div></b>
+                <div id="team-b-captain"></div>
+            </div>
             <div id="team-b-picks"></div>
         </div>
     </div>
     <div class="footer">from <b>RX</b> with ❤️</div>
-    <script type="text/javascript" src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>
