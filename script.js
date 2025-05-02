@@ -66,6 +66,7 @@ const CHARACTERS = [
     {name: 'Void', icon: 'https://supervive.wiki.gg/images/thumb/6/65/PortVoid.png/200px-PortVoid.png'}
 ];
 const TOTAL_PICKS_NEEDED = 8; // Total picks across both teams
+const DEFAULT_TIMER_DURATION = 30; // Default timer duration in seconds
 
 // --- State Variables ---
 let isMultiplayerMode = false; // *** THE CORE MODE FLAG ***
@@ -79,6 +80,11 @@ let local_maxBansPerTeam = 1; // Default bans per team
 let local_gameCounter = 0;
 let local_draftActive = false;
 let local_hunterExclusivity = true;
+// --- NEW: Timer State (Local) ---
+let local_timerEnabled = false;
+let local_timerDuration = DEFAULT_TIMER_DURATION;
+let local_timerIntervalId = null;
+let local_timerEndTime = null; // Timestamp when the current timer ends
 
 // --- Multiplayer Mode State ---
 let mp_currentUserId = null;
@@ -88,6 +94,123 @@ let mp_playerRole = null; // 'captainA', 'captainB', 'spectator', null
 let mp_draftState = {}; // Holds the current state received from Firebase
 let mp_matchHistory = []; // *** NEW: Array for client-side MP history ***
 let mp_gameCounter = 0;   // *** NEW: Counter for client-side MP history divs ***
+// --- NEW: Timer State (Multiplayer - Managed Client-Side based on Firebase State) ---
+let mp_timerIntervalId = null;
+let mp_timerEndTime = null; // Timestamp when the current timer ends (calculated from Firebase)
+
+
+// ========================================================================= //
+// ========================== TIMER FUNCTIONS ============================== //
+// ========================================================================= //
+
+function stopTimer(mode = 'local') {
+    const timerDisplay = document.getElementById('timer-display');
+    if (mode === 'local') {
+        if (local_timerIntervalId) {
+            clearInterval(local_timerIntervalId);
+            local_timerIntervalId = null;
+            local_timerEndTime = null;
+        }
+    } else { // multiplayer
+        if (mp_timerIntervalId) {
+            clearInterval(mp_timerIntervalId);
+            mp_timerIntervalId = null;
+            mp_timerEndTime = null;
+        }
+    }
+     if (timerDisplay) {
+        timerDisplay.textContent = ''; // Clear display
+        timerDisplay.classList.remove('elapsed'); // Remove elapsed styling
+        timerDisplay.style.display = 'none'; // Hide timer
+    }
+}
+
+function updateTimerDisplay() {
+    const timerDisplay = document.getElementById('timer-display');
+    if (!timerDisplay) return;
+
+    let endTime = isMultiplayerMode ? mp_timerEndTime : local_timerEndTime;
+    if (endTime === null) {
+        timerDisplay.textContent = '';
+        timerDisplay.classList.remove('elapsed');
+        timerDisplay.style.display = 'none';
+        return;
+    }
+
+    const now = Date.now();
+    const remainingSeconds = Math.round((endTime - now) / 1000);
+
+    timerDisplay.style.display = 'block'; // Make sure timer is visible
+
+    if (remainingSeconds >= 0) {
+        timerDisplay.textContent = `${remainingSeconds}`;
+        timerDisplay.classList.remove('elapsed');
+    } else {
+        timerDisplay.textContent = `${remainingSeconds}`; // Show negative count
+        timerDisplay.classList.add('elapsed');
+    }
+}
+
+function startTimer(durationSeconds, mode = 'local') {
+    stopTimer(mode); // Ensure any existing timer is stopped
+
+    const endTime = Date.now() + durationSeconds * 1000;
+
+    if (mode === 'local') {
+        local_timerEndTime = endTime;
+        local_timerIntervalId = setInterval(() => {
+            updateTimerDisplay();
+            // Optional: Add logic here if something should happen exactly when local timer hits 0
+            // if (Date.now() >= local_timerEndTime && !document.getElementById('timer-display').classList.contains('elapsed')) {
+            //     // First moment it becomes elapsed
+            // }
+        }, 1000); // Update every second
+    } else { // multiplayer
+        mp_timerEndTime = endTime;
+        mp_timerIntervalId = setInterval(() => {
+            updateTimerDisplay();
+            // Optional: Add logic here if something should happen exactly when MP timer hits 0
+        }, 1000); // Update every second
+    }
+
+    updateTimerDisplay(); // Initial display update
+}
+
+// Specifically for multiplayer, starts the timer based on Firebase state
+function startMultiplayerTimerFromState(state) {
+    stopTimer('multiplayer'); // Stop any existing MP timer first
+
+    const timerEnabled = state?.settings?.timerEnabled ?? false;
+    const timerDuration = state?.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
+    const actionStartTime = state?.currentActionStartTime; // Timestamp from Firebase
+
+    const timerDisplay = document.getElementById('timer-display');
+
+    if (timerEnabled && actionStartTime && state.status === 'in_progress') {
+        // Calculate the theoretical end time based on when the action started and the duration
+        const expectedEndTime = actionStartTime + (timerDuration * 1000);
+        const now = Date.now(); // Use client's current time
+        const remainingMilliseconds = expectedEndTime - now;
+
+        if (remainingMilliseconds > -60000) { // Only start if not already > 1min elapsed
+             mp_timerEndTime = expectedEndTime; // Store the calculated end time
+             mp_timerIntervalId = setInterval(updateTimerDisplay, 1000);
+             updateTimerDisplay(); // Initial update
+        } else {
+            // Timer already significantly elapsed, don't start interval, just show final state
+            mp_timerEndTime = expectedEndTime;
+            updateTimerDisplay();
+        }
+    } else {
+         // Timer is disabled, action hasn't started, or draft not in progress
+         if(timerDisplay) {
+             timerDisplay.textContent = '';
+             timerDisplay.style.display = 'none';
+             timerDisplay.classList.remove('elapsed');
+         }
+    }
+}
+
 
 // ========================================================================= //
 // ========================== UTILITY FUNCTIONS ============================ //
@@ -101,8 +224,9 @@ function resetLocalState() {
     local_bannedCharacters = [];
     local_matchHistory = []; // Clear local history strings
     local_draftActive = false;
+    stopTimer('local'); // Stop local timer
     // local_gameCounter is NOT reset here, only when a new game starts
-    // Don't reset config options like maxBansPerTeam, hunterExclusivity
+    // Don't reset config options like maxBansPerTeam, hunterExclusivity, timerEnabled, timerDuration
 }
 
 function resetMultiplayerState() {
@@ -119,6 +243,7 @@ function resetMultiplayerState() {
      mp_playerRole = null;
      mp_draftState = {}; // Clear the cached draft state
      mp_matchHistory = []; // *** NEW: Clear client-side MP history ***
+     stopTimer('multiplayer'); // Stop multiplayer timer
      // mp_gameCounter is NOT reset here, only when a new game starts
      // Clear session storage related to multiplayer room
      sessionStorage.removeItem('currentDraftId');
@@ -129,11 +254,12 @@ function updateMode(newMode) {
     const previousMode = isMultiplayerMode;
     isMultiplayerMode = newMode;
     const historyContainer = document.getElementById('match-history-container');
+    stopTimer(previousMode ? 'multiplayer' : 'local'); // Stop timer for the mode we're leaving
 
     if (previousMode && !newMode) {
         // --- Switched FROM Multiplayer TO Local ---
-        resetMultiplayerState(); // Clears MP state and unsubscribes
-        resetLocalState();       // Clears local draft progress (keeps settings)
+        resetMultiplayerState(); // Clears MP state and unsubscribes, stops MP timer
+        resetLocalState();       // Clears local draft progress (keeps settings), stops local timer
         resetUIToLocal();        // Resets UI elements for local view
         updateCharacterPoolVisuals(); // Update visuals for local state
         enableLocalDraftControls(); // Enable local config/start buttons
@@ -144,7 +270,7 @@ function updateMode(newMode) {
         }
     } else if (!previousMode && newMode) {
         // --- Switched FROM Local TO Multiplayer ---
-        resetLocalState();        // Clears local draft progress
+        resetLocalState();        // Clears local draft progress, stops local timer
         resetUIForMultiplayer();  // Sets up UI placeholders for MP
         updateCharacterPoolVisuals(); // Update visuals for MP state (likely empty initially)
         disableLocalDraftControls(); // Disable local config/start buttons
@@ -793,6 +919,8 @@ function resetUIToLocal() {
     if (configPanel) configPanel.classList.add('hidden');
     const startBtn = document.getElementById('start-draft');
     if (startBtn) startBtn.style.display = 'inline-block';
+    const timerDisplay = document.getElementById('timer-display');
+    if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer
 
     // Update visuals and names for local mode
     updateCharacterPoolVisuals();
@@ -819,6 +947,8 @@ function resetUIForMultiplayer() {
      if (capB) capB.textContent = '(...)';
      const specList = document.getElementById('spectator-list');
      if (specList) { specList.textContent = ''; }
+     const timerDisplay = document.getElementById('timer-display');
+     if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer initially
 
 
      const configPanel = document.getElementById('config');
@@ -840,10 +970,16 @@ function enableLocalDraftControls() {
     const configBtn = document.getElementById('config-button');
     if (configBtn) configBtn.disabled = isMultiplayerMode;
 
+    // Config elements
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
     if (exclusivityCheck) exclusivityCheck.disabled = isMultiplayerMode || local_draftActive;
     const banSelect = document.getElementById('ban-count');
     if (banSelect) banSelect.disabled = isMultiplayerMode || local_draftActive;
+    const timerEnabledCheck = document.getElementById('timer-enabled');
+    if (timerEnabledCheck) timerEnabledCheck.disabled = isMultiplayerMode || local_draftActive;
+    const timerDurationInput = document.getElementById('timer-duration');
+    if (timerDurationInput) timerDurationInput.disabled = isMultiplayerMode || local_draftActive;
+
 
     const startButton = document.getElementById('start-draft');
     if (startButton) {
@@ -862,6 +998,11 @@ function disableLocalDraftControls() {
       if (exclusivityCheck) exclusivityCheck.setAttribute('disabled', 'true');
       const banSelect = document.getElementById('ban-count');
       if (banSelect) banSelect.setAttribute('disabled', 'true');
+      const timerEnabledCheck = document.getElementById('timer-enabled');
+      if (timerEnabledCheck) timerEnabledCheck.setAttribute('disabled', 'true');
+      const timerDurationInput = document.getElementById('timer-duration');
+      if (timerDurationInput) timerDurationInput.setAttribute('disabled', 'true');
+
       const startBtn = document.getElementById('start-draft');
       // Visibility/state handled by renderMultiplayerUI in MP mode
       if (startBtn && !isMultiplayerMode) {
@@ -998,15 +1139,22 @@ function updateUIAfterJoinCreate(draftId) {
 function handleLocalStartDraft() {
     if (local_draftActive || isMultiplayerMode) return;
 
+    // Read config values
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
     const banSelect = document.getElementById('ban-count');
+    const timerEnabledCheck = document.getElementById('timer-enabled');
+    const timerDurationInput = document.getElementById('timer-duration');
+
     local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
-    // Note: The value in the HTML is total bans (e.g., 2 for 1 per team)
-    const totalBans = banSelect ? parseInt(banSelect.value) : 2; // Default to 2 total (1 per team)
-    local_maxBansPerTeam = totalBans / 2; // Calculate per team
+    const totalBans = banSelect ? parseInt(banSelect.value) : 2;
+    local_maxBansPerTeam = totalBans / 2;
+    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false;
+    local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
+    if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION; // Ensure positive duration
+
 
     // Reset state for the new draft
-    resetLocalState(); // Clears picks, bans, history, sets phase/team
+    resetLocalState(); // Clears picks, bans, history, sets phase/team, stops timer
     local_draftActive = true;
     local_currentPhase = local_maxBansPerTeam > 0 ? 'ban' : 'pick'; // Set starting phase
     local_currentTeam = 'A'; // Team A starts
@@ -1028,6 +1176,11 @@ function handleLocalStartDraft() {
     const skipBanBtn = document.getElementById('skip-ban');
     if (skipBanBtn) {
         skipBanBtn.style.display = (local_currentPhase === 'ban') ? 'inline-block' : 'none';
+    }
+
+    // Start timer if enabled
+    if (local_timerEnabled) {
+        startTimer(local_timerDuration, 'local');
     }
 }
 
@@ -1144,11 +1297,17 @@ function nextLocalPhase() {
     if (skipBanBtn) {
         skipBanBtn.style.display = (local_draftActive && local_currentPhase === 'ban') ? 'inline-block' : 'none';
     }
+
+    // Restart timer for the new turn if enabled
+    if (local_timerEnabled) {
+        startTimer(local_timerDuration, 'local');
+    }
 }
 
 
 function endLocalDraft() {
     local_draftActive = false;
+    stopTimer('local'); // Stop the timer
 
     const statusMessage = document.getElementById('status-message');
     if (statusMessage) statusMessage.textContent = 'Local Draft Complete!';
@@ -1206,28 +1365,38 @@ function createRoom() {
     const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
     const newDraftId = `${datePrefix}-${randomPart}`;
 
+    // Read config values from UI (creator sets the initial config)
     const banSelect = document.getElementById('ban-count');
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
+    const timerEnabledCheck = document.getElementById('timer-enabled');
+    const timerDurationInput = document.getElementById('timer-duration');
+
     const teamAHeading = document.getElementById('team-a-heading')?.firstChild;
     const teamBHeading = document.getElementById('team-b-heading')?.firstChild;
     const teamAName = teamAHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team A";
     const teamBName = teamBHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team B";
     // Total bans selected in dropdown
     const totalBans = banSelect ? parseInt(banSelect.value) : 2; // Default 2 total (1 per team)
+    let timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
+    if (timerDuration <= 0) timerDuration = DEFAULT_TIMER_DURATION; // Ensure positive
 
     const initialDraftState = {
         settings: {
             maxTotalBans: totalBans,
             hunterExclusivity: exclusivityCheck ? exclusivityCheck.checked : true,
+            timerEnabled: timerEnabledCheck ? timerEnabledCheck.checked : false, // NEW
+            timerDuration: timerDuration, // NEW
             createdAt: serverTimestamp(),
         },
         status: 'waiting', // Initial status
         teamAName: teamAName,
         teamBName: teamBName,
-        teamASwapIntent: false, // NEW: Swap intent flag
-        teamBSwapIntent: false, // NEW: Swap intent flag
+        teamASwapIntent: false,
+        teamBSwapIntent: false,
         // Core draft state - will be reset when new draft starts
-        currentPhase: null, currentTeam: null, currentActionExpiresAt: null,
+        currentPhase: null,
+        currentTeam: null,
+        currentActionStartTime: null, // NEW: Timestamp for timer start
         pickOrderIndex: 0, teamAPicks: [], teamBPicks: [], bannedCharacters: [],
         players: {
             [mp_currentUserId]: {
@@ -1417,6 +1586,7 @@ function subscribeToDraft(draftId) {
         if (data) {
             // --- Data Received ---
             const previousStatus = mp_draftState?.status; // Get status before update
+            const previousActionStartTime = mp_draftState?.currentActionStartTime; // Get previous start time
             mp_draftState = data; // Update local cache
 
             // Update local role based on data (in case of swap or if initially spectator)
@@ -1440,8 +1610,23 @@ function subscribeToDraft(draftId) {
                  sessionStorage.removeItem('playerRole');
             }
 
-
             renderMultiplayerUI(data); // Update the UI based on the new state
+
+            // Start/Stop Multiplayer Timer based on state change
+            if (data.status === 'in_progress' && data.currentActionStartTime && data.currentActionStartTime !== previousActionStartTime) {
+                 // Timer should start or restart
+                 startMultiplayerTimerFromState(data);
+            } else if (data.status !== 'in_progress' && mp_timerIntervalId) {
+                 // Draft ended or paused, stop timer
+                 stopTimer('multiplayer');
+            } else if (data.settings?.timerEnabled === false && mp_timerIntervalId) {
+                // Timer was disabled while running
+                stopTimer('multiplayer');
+            } else if (data.settings?.timerEnabled && data.status === 'in_progress' && data.currentActionStartTime && !mp_timerIntervalId) {
+                // Timer enabled, draft running, action started, but timer isn't running locally (e.g., after reconnect)
+                startMultiplayerTimerFromState(data);
+            }
+
 
         } else {
             // --- Data is Null (Room Deleted/Inaccessible) ---
@@ -1505,10 +1690,10 @@ function leaveRoomCleanup() {
     }
 
     // --- 2. Reset Local Multiplayer State ---
-    resetMultiplayerState(); // Clears IDs, role, state, subscription, session storage, mp_matchHistory
+    resetMultiplayerState(); // Clears IDs, role, state, subscription, session storage, mp_matchHistory, stops MP timer
 
     // --- 3. Switch Mode and Update UI ---
-    updateMode(false); // Switches mode flag, resets UI to local, updates buttons, clears history display
+    updateMode(false); // Switches mode flag, resets UI to local, updates buttons, clears history display, stops local timer
     updateStatusMessage(); // Ensure status message reflects local mode
     console.log("MP: Leave cleanup complete. Switched to local mode.");
 }
@@ -1599,6 +1784,9 @@ function renderMultiplayerUI(data) {
     disableLocalDraftControls();
     // Ensure Create/Join/Reconnect/Cancel remain hidden
     updateMultiplayerButtonStates(); // Called last to hide unnecessary buttons
+
+    // Ensure timer display is managed correctly by its dedicated function
+    // startMultiplayerTimerFromState() called in subscribeToDraft handles visibility/updates
 }
 
 
@@ -1631,6 +1819,16 @@ function handleMultiplayerSelect(charName) {
 
         if (!isMyTurn) { console.log("MP Select TXN: Not turn."); return; }
         if (!isCharValidSelectionMP(charName, currentData)) { console.log(`MP Select TXN: Invalid char ${charName}.`); return; }
+
+        // Optional: Check timer elapsed if strict enforcement is needed serverside
+        // const timerEnabled = currentData.settings?.timerEnabled ?? false;
+        // const timerDuration = currentData.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
+        // const actionStartTime = currentData.currentActionStartTime;
+        // if (timerEnabled && actionStartTime && Date.now() > (actionStartTime + timerDuration * 1000)) {
+        //      console.log("MP Select TXN: Timer elapsed. Action ignored.");
+        //      // Optionally force skip the turn here? Needs more complex state management.
+        //      return; // Abort transaction
+        // }
 
         currentData.bannedCharacters = currentData.bannedCharacters || [];
         currentData.teamAPicks = currentData.teamAPicks || [];
@@ -1695,6 +1893,15 @@ function handleMultiplayerSkipBan() {
         const isMyTurn = currentData.currentTeam === expectedTeam;
 
         if (!isMyTurn) { console.log("MP Skip Ban TXN: Not turn."); return; }
+
+        // Optional: Check timer elapsed
+        // const timerEnabled = currentData.settings?.timerEnabled ?? false;
+        // const timerDuration = currentData.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
+        // const actionStartTime = currentData.currentActionStartTime;
+        // if (timerEnabled && actionStartTime && Date.now() > (actionStartTime + timerDuration * 1000)) {
+        //     console.log("MP Skip TXN: Timer elapsed. Action ignored.");
+        //     return; // Abort transaction
+        // }
 
         currentData.bannedCharacters = currentData.bannedCharacters || [];
         const banIndex = currentData.bannedCharacters.length;
@@ -1803,7 +2010,7 @@ function handleMultiplayerStartDraft() {
         const startPhase = maxTotalBans > 0 ? 'ban' : 'pick';
         currentData.currentPhase = startPhase;
         currentData.currentTeam = 'A'; // Team A always starts
-        currentData.currentActionExpiresAt = null;
+        currentData.currentActionStartTime = serverTimestamp(); // NEW: Set timer start time
 
         // --- Setup Client-Side History for New Draft ---
         mp_matchHistory = []; // Clear previous client history array
@@ -1833,18 +2040,18 @@ function handleMultiplayerEditTeamName(event) {
     const canEdit = (myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (mp_draftState.status === 'waiting' || mp_draftState.status === 'complete'));
 
     if (!canEdit) {
-        alert("Can only edit your team's name before the draft starts."); return;
+        alert("Can only edit your team's name before the draft starts or after it completes."); return;
     }
 
     const newName = prompt(`Enter new name for Team ${teamId}:`, currentName);
 
-    if (newName && newName.trim() !== "" && newName.trim().length <= 3) {
+    if (newName && newName.trim() !== "" && newName.trim().length <= 20) { // Increased limit back to 20
         const teamNameRef = ref(db, `drafts/${mp_currentDraftId}/team${teamId}Name`);
         set(teamNameRef, newName.trim())
             .then(() => console.log(`MP: Team ${teamId} name updated.`))
             .catch(err => { console.error("MP Failed to update team name:", err); alert("Error updating name."); });
     } else if (newName !== null) {
-        alert("Invalid name (max 3 chars).");
+        alert("Invalid name (max 20 chars).");
     }
 }
 
@@ -2037,13 +2244,17 @@ function calculateNextStateMP(currentData) {
     // pickOrderIndex might still be useful for other logic, keep it if needed
     // currentData.pickOrderIndex = (currentData.pickOrderIndex || 0) + 1;
 
+    let phaseComplete = false;
+
     if (currentData.currentPhase === 'ban') {
         const bansMade = currentData.bannedCharacters.length;
         if (bansMade >= maxTotalBans) { // Compare with total bans
             currentData.currentPhase = 'pick';
             currentData.currentTeam = 'A'; // A starts pick
+            phaseComplete = true;
         } else {
             currentData.currentTeam = currentData.currentTeam === 'A' ? 'B' : 'A'; // Alternate ban
+            phaseComplete = true;
         }
     } else if (currentData.currentPhase === 'pick') {
         const totalPicksMade = currentData.teamAPicks.length + currentData.teamBPicks.length;
@@ -2051,10 +2262,11 @@ function calculateNextStateMP(currentData) {
             currentData.status = 'complete'; // Set status to complete
             currentData.currentTeam = null;
             currentData.currentPhase = null;
-            currentData.currentActionExpiresAt = null;
+            currentData.currentActionStartTime = null; // Clear timer start time
             // Reset swap intents on completion
             currentData.teamASwapIntent = false;
             currentData.teamBSwapIntent = false;
+            phaseComplete = true;
             // DO NOT reset picks/bans here, keep final state
             // DO NOT reset readiness here, allow ready up for next game
         } else {
@@ -2067,12 +2279,19 @@ function calculateNextStateMP(currentData) {
             } else { // Indices 2, 3, 6
                 currentData.currentTeam = 'A';
             }
+            phaseComplete = true;
         }
     } else {
         console.error("MP calculateNextState: Invalid phase:", currentData.currentPhase);
     }
 
-    currentData.currentActionExpiresAt = null;
+    // If the phase was completed (a valid ban/pick was made or draft finished), update the timer start time
+    if (phaseComplete && currentData.status === 'in_progress') {
+        currentData.currentActionStartTime = serverTimestamp();
+    } else if (currentData.status !== 'in_progress') {
+        currentData.currentActionStartTime = null; // Ensure it's null if draft isn't running
+    }
+
     return currentData; // Return modified state
 }
 
@@ -2169,7 +2388,7 @@ function attachEventListeners() {
         }
     });
 
-    // Config Options (Local Only)
+    // Config Options (Local Only - update local state immediately)
     document.getElementById('hunter-exclusivity')?.addEventListener('change', (e) => {
         if (!isMultiplayerMode && !local_draftActive) {
             local_hunterExclusivity = e.target.checked;
@@ -2184,6 +2403,27 @@ function attachEventListeners() {
              e.target.value = (local_maxBansPerTeam * 2).toString(); // Revert UI
          }
     });
+    // --- NEW: Timer Config Listeners (Local Only) ---
+    document.getElementById('timer-enabled')?.addEventListener('change', (e) => {
+         if (!isMultiplayerMode && !local_draftActive) {
+             local_timerEnabled = e.target.checked;
+         } else {
+             e.target.checked = local_timerEnabled; // Revert UI
+         }
+    });
+    document.getElementById('timer-duration')?.addEventListener('change', (e) => {
+         if (!isMultiplayerMode && !local_draftActive) {
+             let newDuration = parseInt(e.target.value);
+             if (isNaN(newDuration) || newDuration <= 0) {
+                 newDuration = DEFAULT_TIMER_DURATION; // Reset to default if invalid
+                 e.target.value = newDuration;
+             }
+             local_timerDuration = newDuration;
+         } else {
+              e.target.value = local_timerDuration; // Revert UI
+         }
+    });
+
 
     // --- Multiplayer Controls ---
     document.getElementById('create-room-button')?.addEventListener('click', createRoom);
@@ -2327,10 +2567,22 @@ function initializeWebApp() {
     // Read initial local config values
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
     const banSelect = document.getElementById('ban-count');
+    const timerEnabledCheck = document.getElementById('timer-enabled');
+    const timerDurationInput = document.getElementById('timer-duration');
+
     const totalBans = banSelect ? parseInt(banSelect.value) : 2;
     local_maxBansPerTeam = totalBans / 2;
     local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
-    console.log("Initial Local Config:", { local_maxBansPerTeam, local_hunterExclusivity });
+    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false; // Default false
+    local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
+    if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION;
+
+    console.log("Initial Local Config:", { local_maxBansPerTeam, local_hunterExclusivity, local_timerEnabled, local_timerDuration });
+
+    // Ensure UI reflects default state
+    if(timerEnabledCheck) timerEnabledCheck.checked = local_timerEnabled;
+    if(timerDurationInput) timerDurationInput.value = local_timerDuration;
+
 
     // Set initial mode to local, update UI
     updateMode(false); // Starts in local mode, clears history display

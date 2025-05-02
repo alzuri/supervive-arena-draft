@@ -44,10 +44,23 @@
                                     <option value="6">3</option>
                                 </select>
                             </div>
-                        </div>
+                            <br>
+                            <div id="timer-config" class="timer-config">
+                                <label>
+                                    Enable Timer
+                                    <input type="checkbox" id="timer-enabled" checked>
+                                </label>
+                                <br>
+                                <label>
+                                    Timer Duration (s)
+                                    <input type="number" id="timer-duration" value="30" min="15" max="45" step="1">
+                                </label>
+                            </div>
+                            </div>
                     </div>
                     <div id="game-counter" class="hidden">Game #0</div>
-                    <div id="status-message"></div><br>
+                    <div id="status-message"></div>
+                    <div id="timer-display" class="timer-display"></div>
                     <div id="notifications"></div>
                 </div>
                 <br>

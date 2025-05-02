@@ -371,3 +371,20 @@ button:disabled {
      /* Option 2: Blinking */
      /* animation: blink-opacity 1s ease-in-out infinite; */
   }
+
+  #timer-duration {
+    width: 35px
+}
+
+.timer-display {
+    outline: thick ridge white;
+    outline-offset: 3px;
+    border-radius: 1px;
+    margin-left: 15px;
+}
+
+.timer-display.elapsed {
+    color: red;
+    outline-color: red;
+    animation: blink-opacity 1s ease-in-out infinite;
+}
