@@ -532,9 +532,9 @@ function updateStatusMessage() {
                        if (capAReady && capBReady) {
                            statusText = (capAConnected && capBConnected) ? (isSpectator ? "Spectating - Both ready!" : "Both ready! Captain A can start.") : (isSpectator ? "Spectating - Both ready! Waiting for connection..." : "Both ready! Waiting for connection...");
                        } else if (capAReady) {
-                           statusText = isSpectator ? `Spectating - Captain A ready. Waiting for B...` : `Captain A ready. Waiting for Captain B ${capBConnected ? 'to ready up' : 'to connect'}...`;
+                           statusText = isSpectator ? `Spectating - Captain A ready. Waiting for B...` : `Captain A ready. Captain B ${capBConnected ? 'not ready' : 'not connect'}...`;
                        } else if (capBReady) {
-                           statusText = isSpectator ? `Spectating - Captain B ready. Waiting for A...` : `Captain B ready. Waiting for Captain A ${capAConnected ? 'to ready up' : 'to connect'}...`;
+                           statusText = isSpectator ? `Spectating - Captain B ready. Waiting for A...` : `Captain B ready. Captain A ${capAConnected ? 'not ready' : 'not connected'}...`;
                        } else {
                             statusText = isSpectator ? `Spectating - Waiting for captains...` : `Waiting for captains ${capAConnected && capBConnected ? 'to ready up' : 'to connect'}...`;
                        }
@@ -561,11 +561,11 @@ function updateStatusMessage() {
                        return;
                    }
                    const teamName = data.currentTeam === 'A' ? (data.teamAName || 'Team A') : (data.teamBName || 'Team B');
-                   const phaseText = data.currentPhase === 'ban' ? 'BAN PHASE' : 'PICK PHASE';
+                   const phaseText = data.currentPhase === 'ban' ? 'BAN' : 'PICK';
                    const iAmCaptainA = mp_playerRole === 'captainA';
                    const iAmCaptainB = mp_playerRole === 'captainB';
                    const turnPlayer = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
-                   messageEl.textContent = `${isSpectator ? 'Spectating: ' : ''}${teamName} - ${phaseText}${turnPlayer ? ' (Your Turn)' : ''}`;
+                   messageEl.textContent = `${isSpectator ? 'Spectating: ' : ''}${teamName} - ${phaseText}${turnPlayer ? ' (YOUR TURN)' : ''}`;
                    break;
               case 'complete':
                    // Use the client-side game counter for display consistency
@@ -599,7 +599,7 @@ function updateStatusMessage() {
          } else {
               const teamHeading = document.getElementById(`team-${local_currentTeam.toLowerCase()}-heading`);
               const teamName = teamHeading?.firstChild?.textContent?.replace('✎', '').trim() || `Team ${local_currentTeam}`;
-              const phaseText = local_currentPhase === 'ban' ? 'BAN PHASE' : 'PICK PHASE';
+              const phaseText = local_currentPhase === 'ban' ? 'BAN' : 'PICK';
               messageEl.textContent = `${teamName} - ${phaseText}`;
          }
      }
@@ -621,7 +621,7 @@ function updateTeamNamesUI() {
          const draftStatus = data?.status || 'setup';
          const canSwapOrEdit = (draftStatus === 'waiting' || draftStatus === 'complete');
 
-         updatePlayerStatusUI(data?.players || {}); // Update captain/spectator display
+         updatePlayerStatusUI(data?.players || {}, draftStatus); // Pass draftStatus
 
          const myPlayerData = data.players?.[mp_currentUserId];
          const myTeam = myPlayerData?.team;
@@ -734,7 +734,8 @@ function updateTeamNamesUI() {
 }
 
 
-function updatePlayerStatusUI(players) {
+// Modified to accept draftStatus to control emoji visibility
+function updatePlayerStatusUI(players, draftStatus) {
      const teamACaptainElement = document.getElementById('team-a-captain');
      const teamBCaptainElement = document.getElementById('team-b-captain');
      const spectatorListElement = document.getElementById('spectator-list'); // Assuming an element exists with this ID
@@ -755,7 +756,9 @@ function updatePlayerStatusUI(players) {
          }
      }
 
-     const readyIndicator = (player) => player ? (player.isReady ? '✔️' : '⏳') : '';
+     // Conditionally show ready indicator based on draft status
+     const showReady = draftStatus === 'waiting' || draftStatus === 'complete';
+     const readyIndicator = (player) => (player && showReady) ? (player.isReady ? '✔️' : '⏳') : '';
      const connectionIndicator = (player) => player ? (player.isConnected ? '🟢' : '🔴') : '';
 
      teamACaptainElement.textContent = captainA
@@ -768,10 +771,13 @@ function updatePlayerStatusUI(players) {
      // Update spectator list display
      if (spectators.length > 0) {
          spectatorListElement.textContent = `${spectators.join(', ')}`;
-         spectatorListElement.style.display = 'block';
+         spectatorListElement.style.display = 'block'; // Ensure visibility if spectators exist
+         spectatorListElement.closest('details').style.display = 'block'; // Show the details container
      } else {
          spectatorListElement.textContent = '';
-         spectatorListElement.style.display = 'none';
+         // Don't hide the element itself, just clear content
+         // Hiding the parent 'details' element might be better if desired
+         spectatorListElement.closest('details').style.display = 'none'; // Hide the details container if empty
      }
 }
 
@@ -808,7 +814,7 @@ function recordAndDisplayLocalMatchHistory(team, phase, character) {
           entryText = `${team} BAN: ${character || 'Skipped'}. `;
       } else if (phase === 'pick') {
           // Pick number should be 1-based for display
-          entryText = `${team} PICK ${currentPickNumber + 1}: ${character}. `;
+          entryText = `${team} PICK ${currentPickNumber}: ${character}. `;
       } else {
           return;
       }
@@ -897,8 +903,8 @@ function resetUIToLocal() {
     if (capA) capA.textContent = '';
     const capB = document.getElementById('team-b-captain');
     if (capB) capB.textContent = '';
-    const specList = document.getElementById('spectator-list');
-    if (specList) { specList.textContent = ''; specList.style.display = 'none'; }
+    const specListContainer = document.getElementById('spectator-list-container'); // Target the container
+    if (specListContainer) specListContainer.style.display = 'none'; // Hide spectator section
     const reconnectBtn = document.getElementById('reconnect-button');
     if (reconnectBtn) reconnectBtn.classList.add('hidden');
     const cancelSessionBtn = document.getElementById('cancel-session-button');
@@ -921,6 +927,9 @@ function resetUIToLocal() {
     if (startBtn) startBtn.style.display = 'inline-block';
     const timerDisplay = document.getElementById('timer-display');
     if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer
+    const configButton = document.getElementById('config-button'); // Show config button
+    if(configButton) configButton.style.display = 'inline-block';
+
 
     // Update visuals and names for local mode
     updateCharacterPoolVisuals();
@@ -945,8 +954,8 @@ function resetUIForMultiplayer() {
      if (capA) capA.textContent = '(...)';
      const capB = document.getElementById('team-b-captain');
      if (capB) capB.textContent = '(...)';
-     const specList = document.getElementById('spectator-list');
-     if (specList) { specList.textContent = ''; }
+     const specListContainer = document.getElementById('spectator-list-container'); // Target the container
+     if (specListContainer) specListContainer.style.display = 'block'; // Show spectator section in MP
      const timerDisplay = document.getElementById('timer-display');
      if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer initially
 
@@ -955,6 +964,12 @@ function resetUIForMultiplayer() {
      if (configPanel) configPanel.classList.add('hidden');
      const skipBtn = document.getElementById('skip-ban');
      if (skipBtn) skipBtn.style.display = 'none';
+     const configButton = document.getElementById('config-button'); // Show config button initially
+     if(configButton) configButton.style.display = 'inline-block';
+     const readyButton = document.getElementById('ready-button'); // Show ready button initially
+     if(readyButton) readyButton.classList.remove('hidden');
+
+
      //const readyBtn = document.getElementById('ready-button');
      //if (readyBtn) readyBtn.classList.add('hidden'); // Visibility handled by renderMultiplayerUI
 
@@ -966,20 +981,37 @@ function resetUIForMultiplayer() {
      updateTeamNamesUI(); // Update names/status/buttons for MP
 }
 
+// Renamed for clarity
+function updateConfigInputsState(disabled, syncFromFirebase = false) {
+    const exclusivityCheck = document.getElementById('hunter-exclusivity');
+    const banSelect = document.getElementById('ban-count');
+    const timerEnabledCheck = document.getElementById('timer-enabled');
+    const timerDurationInput = document.getElementById('timer-duration');
+
+    const elements = [exclusivityCheck, banSelect, timerEnabledCheck, timerDurationInput];
+
+    if (syncFromFirebase && isMultiplayerMode && mp_draftState?.settings) {
+        // Update UI elements to match Firebase state before changing disabled status
+        const settings = mp_draftState.settings;
+        if (exclusivityCheck) exclusivityCheck.checked = settings.hunterExclusivity ?? true;
+        if (banSelect) banSelect.value = settings.maxTotalBans?.toString() ?? "2";
+        if (timerEnabledCheck) timerEnabledCheck.checked = settings.timerEnabled ?? false;
+        if (timerDurationInput) timerDurationInput.value = settings.timerDuration ?? DEFAULT_TIMER_DURATION;
+    }
+
+    elements.forEach(el => {
+        if (el) {
+            el.disabled = disabled;
+        }
+    });
+}
+
+
 function enableLocalDraftControls() {
     const configBtn = document.getElementById('config-button');
-    if (configBtn) configBtn.disabled = isMultiplayerMode;
+    if (configBtn) configBtn.disabled = false; // Enable config button
 
-    // Config elements
-    const exclusivityCheck = document.getElementById('hunter-exclusivity');
-    if (exclusivityCheck) exclusivityCheck.disabled = isMultiplayerMode || local_draftActive;
-    const banSelect = document.getElementById('ban-count');
-    if (banSelect) banSelect.disabled = isMultiplayerMode || local_draftActive;
-    const timerEnabledCheck = document.getElementById('timer-enabled');
-    if (timerEnabledCheck) timerEnabledCheck.disabled = isMultiplayerMode || local_draftActive;
-    const timerDurationInput = document.getElementById('timer-duration');
-    if (timerDurationInput) timerDurationInput.disabled = isMultiplayerMode || local_draftActive;
-
+    updateConfigInputsState(false); // Enable config inputs
 
     const startButton = document.getElementById('start-draft');
     if (startButton) {
@@ -993,28 +1025,23 @@ function enableLocalDraftControls() {
 
 function disableLocalDraftControls() {
       const configBtn = document.getElementById('config-button');
-      if (configBtn) configBtn.setAttribute('disabled', 'true');
-      const exclusivityCheck = document.getElementById('hunter-exclusivity');
-      if (exclusivityCheck) exclusivityCheck.setAttribute('disabled', 'true');
-      const banSelect = document.getElementById('ban-count');
-      if (banSelect) banSelect.setAttribute('disabled', 'true');
-      const timerEnabledCheck = document.getElementById('timer-enabled');
-      if (timerEnabledCheck) timerEnabledCheck.setAttribute('disabled', 'true');
-      const timerDurationInput = document.getElementById('timer-duration');
-      if (timerDurationInput) timerDurationInput.setAttribute('disabled', 'true');
+      if (configBtn) configBtn.disabled = true; // Disable config button
+
+      updateConfigInputsState(true); // Disable config inputs
 
       const startBtn = document.getElementById('start-draft');
       // Visibility/state handled by renderMultiplayerUI in MP mode
       if (startBtn && !isMultiplayerMode) {
-          startBtn.setAttribute('disabled', 'true');
+          startBtn.disabled = true; // Disable start button
           startBtn.style.display = 'none';
       } else if (startBtn && isMultiplayerMode) {
-          // Don't hide, let renderMultiplayerUI control it
+          // Don't hide/disable here, let renderMultiplayerUI control it
       }
+
       const configPanel = document.getElementById('config');
-      if (configPanel) configPanel.classList.add('hidden');
+      if (configPanel) configPanel.classList.add('hidden'); // Hide config panel
       const skipBtn = document.getElementById('skip-ban');
-      if (skipBtn) skipBtn.style.display = 'none';
+      if (skipBtn) skipBtn.style.display = 'none'; // Hide skip ban
 }
 
 function disableMultiplayerJoinCreateButtons() {
@@ -1045,8 +1072,9 @@ function updateMultiplayerButtonStates() {
     const joinInputContainer = document.getElementById('join-room-input-container');
     const reconnectBtn = document.getElementById('reconnect-button');
     const cancelSessionBtn = document.getElementById('cancel-session-button');
+    const configBtn = document.getElementById('config-button'); // Get config button
 
-    if (!createBtn || !joinBtn || !leaveBtn || !joinInputContainer || !readyBtn || !reconnectBtn || !cancelSessionBtn) {
+    if (!createBtn || !joinBtn || !leaveBtn || !joinInputContainer || !readyBtn || !reconnectBtn || !cancelSessionBtn || !configBtn) {
         console.warn("One or more MP control buttons not found.");
         return;
     }
@@ -1055,21 +1083,25 @@ function updateMultiplayerButtonStates() {
     createBtn.classList.add('hidden'); createBtn.disabled = true;
     joinBtn.classList.add('hidden'); joinBtn.disabled = true;
     leaveBtn.classList.add('hidden');
-    readyBtn.classList.add('hidden'); // Visibility handled by renderMultiplayerUI
+    readyBtn.classList.add('hidden'); // Visibility controlled by renderMultiplayerUI
     joinInputContainer.classList.add('hidden');
     reconnectBtn.classList.add('hidden'); reconnectBtn.disabled = true;
     cancelSessionBtn.classList.add('hidden'); cancelSessionBtn.disabled = true;
+    configBtn.classList.add('hidden'); configBtn.disabled = true; // Hide/disable config button by default
 
     // --- Scenario 1: Actively IN a multiplayer room ---
     if (isMultiplayerMode) {
-        leaveBtn.classList.remove('hidden'); // Show the standard "Leave Room" button
-        readyBtn.classList.remove('hidden'); // We need this for the game to be able to start
-        // Other buttons (Start/Reconnect/Cancel/Create/Join) remain hidden/disabled here
-        // because renderMultiplayerUI handles their visibility/state based on draft status
-        return;
+        leaveBtn.classList.remove('hidden'); // Show Leave
+        // Config and Ready button visibility/state are handled by renderMultiplayerUI
+        configBtn.classList.remove('hidden'); // Make config button potentially visible
+        readyBtn.classList.remove('hidden'); // Make ready button potentially visible
+        return; // Exit, let renderMultiplayerUI handle the rest
     }
 
     // --- Scenario 2: NOT in Multiplayer Mode ---
+    configBtn.classList.remove('hidden'); // Config button is visible in local mode
+    configBtn.disabled = local_draftActive; // Disabled if local draft active
+
     // Leave and Ready buttons are always hidden when not in MP mode.
     if (authError) {
         // Show nothing interactable if auth failed
@@ -1125,7 +1157,7 @@ function updateUIAfterJoinCreate(draftId) {
      const leaveButton = document.getElementById('leave-room-button');
      if (leaveButton) leaveButton.classList.remove('hidden');
 
-     updateMultiplayerButtonStates(); // Hide create/join/reconnect/cancel
+     updateMultiplayerButtonStates(); // Hide create/join/reconnect/cancel, show Leave/Config/Ready
      updateTeamNamesUI(); // Update names based on initial state
      // Clear history display area for the new room
      const historyDisplay = document.getElementById('match-history');
@@ -1703,7 +1735,7 @@ function renderMultiplayerUI(data) {
     if (!isMultiplayerMode || !data) return;
 
     // Update core UI elements based on new data
-    updateTeamNamesUI(); // Includes player status/readiness/swap/edit button display
+    updateTeamNamesUI(); // Includes player status/readiness/swap/edit button display (passes draftStatus)
     updateStatusMessage();
     updateTeamDisplay();
     updateCharacterPoolVisuals(); // Styles characters based on bans/picks/turn
@@ -1713,9 +1745,12 @@ function renderMultiplayerUI(data) {
     const skipBanButton = document.getElementById('skip-ban');
     const leaveButton = document.getElementById('leave-room-button');
     const readyButton = document.getElementById('ready-button');
+    const configButton = document.getElementById('config-button'); // Get config button
+    const configPanel = document.getElementById('config');
 
-    if (!startDraftBtn || !skipBanButton || !leaveButton || !readyButton) {
-        console.warn("MP renderMultiplayerUI: One or more control buttons missing.");
+
+    if (!startDraftBtn || !skipBanButton || !leaveButton || !readyButton || !configButton || !configPanel) {
+        console.warn("MP renderMultiplayerUI: One or more control buttons or config panel missing.");
         return;
     }
 
@@ -1723,7 +1758,7 @@ function renderMultiplayerUI(data) {
     const draftStatus = data.status || 'setup'; // 'waiting', 'in_progress', 'complete'
     const iAmCaptainA = mp_playerRole === 'captainA';
     const iAmCaptainB = mp_playerRole === 'captainB';
-    const isSpectator = mp_playerRole === 'spectator'; // *** NEW: Spectator check ***
+    const isSpectator = mp_playerRole === 'spectator';
     const isMyCaptainRole = iAmCaptainA || iAmCaptainB;
 
 
@@ -1748,23 +1783,33 @@ function renderMultiplayerUI(data) {
     const bothReady = playerA?.isReady && playerB?.isReady;
 
 
-    // --- Button Logic ---
+    // --- Button and Config Logic based on Draft Status ---
 
-    // Ready Button (Visible for captains in 'waiting' or 'complete' status)
-    const showReadyButton = !isSpectator && isMyCaptainRole && (draftStatus === 'waiting' || draftStatus === 'complete');
+    const isDraftActive = draftStatus === 'in_progress';
+
+    // Config Button & Panel Handling
+    configButton.style.display = isDraftActive ? 'none' : 'inline-block'; // Hide during draft
+    if (isDraftActive) {
+        configPanel.classList.add('hidden'); // Ensure panel is hidden if draft starts while it's open
+    }
+    // Enable config button only for Captain A when draft is NOT active
+    configButton.disabled = isDraftActive || !iAmCaptainA;
+    // Disable config inputs if draft is active OR if user is not Captain A
+    updateConfigInputsState(isDraftActive || !iAmCaptainA, true); // Disable/Enable inputs, sync values from Firebase
+
+    // Ready Button
+    const showReadyButton = !isDraftActive && !isSpectator && isMyCaptainRole;
+    readyButton.style.display = showReadyButton ? 'inline-block' : 'none'; // Hide during draft or if spectator
     if (showReadyButton) {
-        readyButton.classList.remove('hidden');
-        readyButton.disabled = false; // Enable button
+        readyButton.disabled = false;
         readyButton.textContent = iAmReady ? "Unready" : "Ready Up";
-    } else {
-        readyButton.classList.add('hidden');
     }
 
-    // Start Draft Button (Visible for Captain A in 'waiting' or 'complete', enabled only when ready)
-    const showStartButton = !isSpectator && iAmCaptainA && (draftStatus === 'waiting' || draftStatus === 'complete');
+    // Start Draft Button (Visible for Captain A when draft NOT active)
+    const showStartButton = !isDraftActive && iAmCaptainA;
     if (showStartButton) {
         startDraftBtn.style.display = 'inline-block';
-        // Enable only if waiting/complete AND both captains are connected AND ready
+        // Enable only if NOT active AND both captains are connected AND ready
         startDraftBtn.disabled = !(bothConnected && bothReady);
         startDraftBtn.textContent = "Start Draft";
     } else {
@@ -1773,20 +1818,17 @@ function renderMultiplayerUI(data) {
 
     // Skip Ban Button (Visible and enabled for current captain during ban phase)
     const myTurn = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
-    const showSkip = !isSpectator && draftStatus === 'in_progress' && data.currentPhase === 'ban' && myTurn;
+    const showSkip = isDraftActive && data.currentPhase === 'ban' && myTurn && !isSpectator;
     skipBanButton.style.display = showSkip ? 'inline-block' : 'none';
     skipBanButton.disabled = !showSkip;
 
     // Leave Room Button (Always visible in MP mode)
     leaveButton.classList.remove('hidden');
 
-    // Ensure local controls remain disabled
-    disableLocalDraftControls();
     // Ensure Create/Join/Reconnect/Cancel remain hidden
-    updateMultiplayerButtonStates(); // Called last to hide unnecessary buttons
-
-    // Ensure timer display is managed correctly by its dedicated function
-    // startMultiplayerTimerFromState() called in subscribeToDraft handles visibility/updates
+    // Note: updateMultiplayerButtonStates handles the initial state when *entering* MP mode.
+    // Here we ensure things stay hidden/disabled as needed based on the *current* MP state.
+    disableMultiplayerJoinCreateButtons();
 }
 
 
@@ -2035,9 +2077,10 @@ function handleMultiplayerEditTeamName(event) {
     const nameSpan = headingDiv.firstChild;
     const currentName = nameSpan?.textContent?.replace('✎', '').trim() || (teamId === 'A' ? 'Team A' : 'Team B');
 
-    // Check permissions: Captain of team, and draft 'waiting'
+    // Check permissions: Captain of team, and draft 'waiting' or 'complete'
     const myPlayerData = mp_draftState.players?.[mp_currentUserId];
-    const canEdit = (myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (mp_draftState.status === 'waiting' || mp_draftState.status === 'complete'));
+    const draftStatus = mp_draftState.status;
+    const canEdit = (myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (draftStatus === 'waiting' || draftStatus === 'complete'));
 
     if (!canEdit) {
         alert("Can only edit your team's name before the draft starts or after it completes."); return;
@@ -2054,6 +2097,37 @@ function handleMultiplayerEditTeamName(event) {
         alert("Invalid name (max 20 chars).");
     }
 }
+
+// --- NEW: Handle Multiplayer Config Update ---
+function handleMultiplayerConfigUpdate(settingName, value) {
+    if (!db || !isMultiplayerMode || !mp_currentDraftId || mp_playerRole !== 'captainA') {
+         console.warn("MP Config Update cancelled: Conditions not met (not MP, no draft ID, or not Captain A).");
+         // Revert UI optimistically - Firebase listener will correct if update fails
+         updateConfigInputsState(false, true); // Sync from Firebase state
+         return;
+    }
+
+    const draftStatus = mp_draftState?.status;
+    if (draftStatus !== 'waiting' && draftStatus !== 'complete') {
+         console.warn("MP Config Update cancelled: Can only change config when waiting or complete.");
+          // Revert UI optimistically
+         updateConfigInputsState(false, true); // Sync from Firebase state
+         return;
+    }
+
+    console.log(`MP: Captain A updating setting '${settingName}' to '${value}'`);
+
+    const settingRef = ref(db, `drafts/${mp_currentDraftId}/settings/${settingName}`);
+    set(settingRef, value)
+        .then(() => console.log(`MP: Setting '${settingName}' updated successfully.`))
+        .catch((error) => {
+            console.error(`MP: Failed to update setting '${settingName}':`, error);
+            alert(`Error updating setting: ${settingName}. Please try again.`);
+             // Revert UI optimistically on failure
+             updateConfigInputsState(false, true); // Sync from Firebase state
+        });
+}
+
 
 // --- NEW: Handle Swap Intent Click ---
 function handleSwapIntentClick(event) {
@@ -2366,6 +2440,35 @@ function handleCharacterClick(charName) {
     else handleLocalSelect(charName);
 }
 
+// NEW: Central handler for config button click
+function handleConfigButtonClick() {
+    const configPanel = document.getElementById('config');
+    if (!configPanel) return;
+
+    if (isMultiplayerMode) {
+         // In MP mode, only Captain A can toggle when draft is not active
+         const draftStatus = mp_draftState?.status;
+         const canToggle = mp_playerRole === 'captainA' && (draftStatus === 'waiting' || draftStatus === 'complete');
+         if (canToggle) {
+            // Ensure inputs reflect current Firebase state before showing
+             updateConfigInputsState(false, true); // Sync values, keep enabled
+             configPanel.classList.toggle('hidden');
+         } else {
+             // If clicked by someone else or at the wrong time, ensure it's hidden
+             configPanel.classList.add('hidden');
+             // Optionally notify user? console.log("Config cannot be changed now / by you.");
+         }
+    } else {
+        // In local mode, toggle if draft is not active
+        if (!local_draftActive) {
+            configPanel.classList.toggle('hidden');
+        } else {
+             configPanel.classList.add('hidden'); // Ensure hidden if draft active
+        }
+    }
+}
+
+
 function attachEventListeners() {
     // Start Draft Button (Local/MP)
     document.getElementById('start-draft')?.addEventListener('click', () => {
@@ -2380,44 +2483,54 @@ function attachEventListeners() {
     // Edit Team Name / Swap Intent Buttons (Event delegation handled in updateTeamNamesUI by assigning onclick)
     // No direct listener needed here anymore as updateTeamNamesUI manages the button's behavior and handler.
 
-    // Config Panel Toggle (Local Only)
-    document.getElementById('config-button')?.addEventListener('click', () => {
-        const configPanel = document.getElementById('config');
-        if (!isMultiplayerMode && !local_draftActive && configPanel) {
-            configPanel.classList.toggle('hidden');
-        }
-    });
+    // Config Panel Toggle Button (Uses central handler)
+    document.getElementById('config-button')?.addEventListener('click', handleConfigButtonClick);
 
-    // Config Options (Local Only - update local state immediately)
+
+    // --- Config Input Listeners (Handle Both Local and MP) ---
     document.getElementById('hunter-exclusivity')?.addEventListener('change', (e) => {
-        if (!isMultiplayerMode && !local_draftActive) {
-            local_hunterExclusivity = e.target.checked;
+        const newValue = e.target.checked;
+        if (isMultiplayerMode) {
+            handleMultiplayerConfigUpdate('hunterExclusivity', newValue);
+        } else if (!local_draftActive) {
+            local_hunterExclusivity = newValue;
         } else {
             e.target.checked = local_hunterExclusivity; // Revert UI if changed inappropriately
         }
     });
+
     document.getElementById('ban-count')?.addEventListener('change', (e) => {
-         if (!isMultiplayerMode && !local_draftActive) {
-             local_maxBansPerTeam = parseInt(e.target.value) / 2; // Store per team
+        const newValue = parseInt(e.target.value);
+         if (isMultiplayerMode) {
+             handleMultiplayerConfigUpdate('maxTotalBans', newValue);
+         } else if (!local_draftActive) {
+             local_maxBansPerTeam = newValue / 2; // Store per team locally
          } else {
              e.target.value = (local_maxBansPerTeam * 2).toString(); // Revert UI
          }
     });
-    // --- NEW: Timer Config Listeners (Local Only) ---
+
     document.getElementById('timer-enabled')?.addEventListener('change', (e) => {
-         if (!isMultiplayerMode && !local_draftActive) {
-             local_timerEnabled = e.target.checked;
+        const newValue = e.target.checked;
+         if (isMultiplayerMode) {
+             handleMultiplayerConfigUpdate('timerEnabled', newValue);
+         } else if (!local_draftActive) {
+             local_timerEnabled = newValue;
          } else {
              e.target.checked = local_timerEnabled; // Revert UI
          }
     });
+
     document.getElementById('timer-duration')?.addEventListener('change', (e) => {
-         if (!isMultiplayerMode && !local_draftActive) {
-             let newDuration = parseInt(e.target.value);
-             if (isNaN(newDuration) || newDuration <= 0) {
-                 newDuration = DEFAULT_TIMER_DURATION; // Reset to default if invalid
-                 e.target.value = newDuration;
-             }
+         let newDuration = parseInt(e.target.value);
+         if (isNaN(newDuration) || newDuration <= 0) {
+             newDuration = DEFAULT_TIMER_DURATION; // Reset to default if invalid
+             e.target.value = newDuration; // Correct the input display
+         }
+
+         if (isMultiplayerMode) {
+             handleMultiplayerConfigUpdate('timerDuration', newDuration);
+         } else if (!local_draftActive) {
              local_timerDuration = newDuration;
          } else {
               e.target.value = local_timerDuration; // Revert UI

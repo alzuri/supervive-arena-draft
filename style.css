@@ -245,6 +245,7 @@ button:disabled {
     border: 3px solid #4CAF50;
     min-width: 200px;
     padding-left: 10px;
+    margin-left: 70px;
 }
 
 .draft-status {
