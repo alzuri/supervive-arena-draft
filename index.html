@@ -48,14 +48,20 @@
                                 </select>
                             </div>
                             <br>
+                            <div id="draft-order-select-container" class="draft-order-select"> <label>Draft order:&nbsp;</label>
+                                <select id="draft-order-type-select">
+                                    <option value="Snake" selected>Snake (A-BB-AA-BB-A)</option>
+                                    <option value="Alt">Alt (A-BB-A-B-AA-B)</option>
+                                </select>
+                            </div>
                             <div id="timer-config" class="timer-config">
                                 <label>
-                                    Enable Timer
+                                    Enable timer
                                     <input type="checkbox" id="timer-enabled" checked>
                                 </label>
                                 <br>
                                 <label>
-                                    Timer Duration (s)
+                                    Timer duration (s)
                                     <input type="number" id="timer-duration" value="30" min="15" max="45" step="1">
                                 </label>
                             </div>

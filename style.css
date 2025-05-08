@@ -241,11 +241,12 @@ button:disabled {
 #config {
     position: fixed;
     z-index: 2;
+    bottom: 0;
     background-color: #1a1a1a;
     border: 3px solid #4CAF50;
     min-width: 200px;
     padding-left: 10px;
-    margin-left: 70px;
+    margin-left: 100px;
 }
 
 .draft-status {

@@ -80,6 +80,7 @@ let local_maxBansPerTeam = 1; // Default bans per team
 let local_gameCounter = 0;
 let local_draftActive = false;
 let local_hunterExclusivity = true;
+let local_draftOrderType = 'Snake'; // NEW: Draft Order Type for Local
 // --- NEW: Timer State (Local) ---
 let local_timerEnabled = false;
 let local_timerDuration = DEFAULT_TIMER_DURATION;
@@ -226,7 +227,7 @@ function resetLocalState() {
     local_draftActive = false;
     stopTimer('local'); // Stop local timer
     // local_gameCounter is NOT reset here, only when a new game starts
-    // Don't reset config options like maxBansPerTeam, hunterExclusivity, timerEnabled, timerDuration
+    // Don't reset config options like maxBansPerTeam, hunterExclusivity, timerEnabled, timerDuration, draftOrderType
 }
 
 function resetMultiplayerState() {
@@ -987,8 +988,9 @@ function updateConfigInputsState(disabled, syncFromFirebase = false) {
     const banSelect = document.getElementById('ban-count');
     const timerEnabledCheck = document.getElementById('timer-enabled');
     const timerDurationInput = document.getElementById('timer-duration');
+    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
 
-    const elements = [exclusivityCheck, banSelect, timerEnabledCheck, timerDurationInput];
+    const elements = [exclusivityCheck, banSelect, timerEnabledCheck, timerDurationInput, draftOrderSelect]; // NEW: Added draftOrderSelect
 
     if (syncFromFirebase && isMultiplayerMode && mp_draftState?.settings) {
         // Update UI elements to match Firebase state before changing disabled status
@@ -997,6 +999,7 @@ function updateConfigInputsState(disabled, syncFromFirebase = false) {
         if (banSelect) banSelect.value = settings.maxTotalBans?.toString() ?? "2";
         if (timerEnabledCheck) timerEnabledCheck.checked = settings.timerEnabled ?? false;
         if (timerDurationInput) timerDurationInput.value = settings.timerDuration ?? DEFAULT_TIMER_DURATION;
+        if (draftOrderSelect) draftOrderSelect.value = settings.draftOrderType || 'Snake'; // NEW
     }
 
     elements.forEach(el => {
@@ -1176,6 +1179,7 @@ function handleLocalStartDraft() {
     const banSelect = document.getElementById('ban-count');
     const timerEnabledCheck = document.getElementById('timer-enabled');
     const timerDurationInput = document.getElementById('timer-duration');
+    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
 
     local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
     const totalBans = banSelect ? parseInt(banSelect.value) : 2;
@@ -1183,6 +1187,7 @@ function handleLocalStartDraft() {
     local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false;
     local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
     if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION; // Ensure positive duration
+    local_draftOrderType = draftOrderSelect ? draftOrderSelect.value : 'Snake'; // NEW
 
 
     // Reset state for the new draft
@@ -1292,10 +1297,8 @@ function isCharValidSelectionLocal(charName) {
 function nextLocalPhase() {
     if (!local_draftActive) return;
 
-    // Count actual bans (excluding placeholders) for phase logic if needed,
-    // but length is fine for simple alternation
     const totalBansMade = local_bannedCharacters.length;
-    const totalExpectedBans = local_maxBansPerTeam * 2; // Total bans across both teams
+    const totalExpectedBans = local_maxBansPerTeam * 2;
     const totalPicksMade = local_teamAPicks.length + local_teamBPicks.length;
 
     if (local_currentPhase === 'ban') {
@@ -1310,14 +1313,25 @@ function nextLocalPhase() {
             endLocalDraft();
             return; // Exit early as draft is over
         } else {
-            // Determine next picking team (A-BB-AA-BB-A order)
-            const currentPickIndex = totalPicksMade - 1; // 0-based index of the pick just made
-            // Indices where B picks next: 0 (after A's 1st), 1 (B's 2nd), 4 (after A's 3rd), 5 (B's 4th)
-            // Indices where A picks next: 2 (after B's 2nd), 3 (A's 3rd), 6 (after B's 4th)
-            if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
-                 local_currentTeam = 'B';
-            } else { // Indices 2, 3, 6
-                 local_currentTeam = 'A';
+            // Determine next picking team
+            if (local_draftOrderType === 'Alt') {
+                // Alt order: A B B A B A A B
+                // picksMadeCount is the number of picks *already completed*
+                const picksMadeCount = totalPicksMade;
+                if (picksMadeCount === 1) local_currentTeam = 'B';      // After A's 1st
+                else if (picksMadeCount === 2) local_currentTeam = 'B'; // After B's 1st
+                else if (picksMadeCount === 3) local_currentTeam = 'A'; // After B's 2nd
+                else if (picksMadeCount === 4) local_currentTeam = 'B'; // After A's 2nd
+                else if (picksMadeCount === 5) local_currentTeam = 'A'; // After B's 3rd
+                else if (picksMadeCount === 6) local_currentTeam = 'A'; // After A's 3rd
+                else if (picksMadeCount === 7) local_currentTeam = 'B'; // After A's 4th
+            } else { // Default to Snake order: A-BB-AA-BB-A
+                const currentPickIndex = totalPicksMade - 1; // 0-based index of the pick just made
+                if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
+                     local_currentTeam = 'B';
+                } else { // Indices 2, 3, 6
+                     local_currentTeam = 'A';
+                }
             }
         }
     }
@@ -1402,22 +1416,23 @@ function createRoom() {
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
     const timerEnabledCheck = document.getElementById('timer-enabled');
     const timerDurationInput = document.getElementById('timer-duration');
+    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
 
     const teamAHeading = document.getElementById('team-a-heading')?.firstChild;
     const teamBHeading = document.getElementById('team-b-heading')?.firstChild;
     const teamAName = teamAHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team A";
     const teamBName = teamBHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team B";
-    // Total bans selected in dropdown
-    const totalBans = banSelect ? parseInt(banSelect.value) : 2; // Default 2 total (1 per team)
+    const totalBans = banSelect ? parseInt(banSelect.value) : 2;
     let timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
-    if (timerDuration <= 0) timerDuration = DEFAULT_TIMER_DURATION; // Ensure positive
+    if (timerDuration <= 0) timerDuration = DEFAULT_TIMER_DURATION;
 
     const initialDraftState = {
         settings: {
             maxTotalBans: totalBans,
             hunterExclusivity: exclusivityCheck ? exclusivityCheck.checked : true,
-            timerEnabled: timerEnabledCheck ? timerEnabledCheck.checked : false, // NEW
-            timerDuration: timerDuration, // NEW
+            timerEnabled: timerEnabledCheck ? timerEnabledCheck.checked : false,
+            timerDuration: timerDuration,
+            draftOrderType: draftOrderSelect ? draftOrderSelect.value : 'Snake', // NEW
             createdAt: serverTimestamp(),
         },
         status: 'waiting', // Initial status
@@ -1425,18 +1440,17 @@ function createRoom() {
         teamBName: teamBName,
         teamASwapIntent: false,
         teamBSwapIntent: false,
-        // Core draft state - will be reset when new draft starts
         currentPhase: null,
         currentTeam: null,
-        currentActionStartTime: null, // NEW: Timestamp for timer start
+        currentActionStartTime: null,
         pickOrderIndex: 0, teamAPicks: [], teamBPicks: [], bannedCharacters: [],
         players: {
             [mp_currentUserId]: {
-                displayName: `${mp_currentUserId.substring(0, 4)}`, // Simple display name
+                displayName: `${mp_currentUserId.substring(0, 4)}`,
                 team: 'A',
                 role: 'captain',
-                isConnected: true, // Presence updates this
-                isReady: false     // Start as not ready
+                isConnected: true,
+                isReady: false
             }
         },
     };
@@ -1453,27 +1467,24 @@ function createRoom() {
         sessionStorage.setItem('currentDraftId', newDraftId);
         sessionStorage.setItem('playerRole', mp_playerRole);
 
-        // --- Copy to Clipboard ---
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             navigator.clipboard.writeText(newDraftId).then(() => {
-                notifyUser(`Room Code copied to clipboard`, 2000); // Notify user
+                notifyUser(`Room Code copied to clipboard`, 2000);
             }).catch(err => {
                 console.error('Failed to copy room code automatically: ', err);
-                //notifyUser(`Room Code: ${newDraftId}`, 5000); // Show code anyway
             });
         } else {
             console.warn('Clipboard API not supported.');
-            //notifyUser(`Room Code: ${newDraftId}`, 5000); // Show code anyway
         }
 
-        updateUIAfterJoinCreate(newDraftId); // Update UI elements
-        subscribeToDraft(newDraftId);       // Start listening
-        setupPresence(mp_currentUserId);    // Set up online status
+        updateUIAfterJoinCreate(newDraftId);
+        subscribeToDraft(newDraftId);
+        setupPresence(mp_currentUserId);
 
     }).catch(error => {
         console.error("MP: Failed to create room:", error);
         alert("Error creating room. Please try again.");
-        updateMode(false); // Revert to local mode UI on failure
+        updateMode(false);
     });
 }
 
@@ -1497,38 +1508,28 @@ function joinRoom(roomCodeInput) {
 
     runTransaction(draftRef, (currentData) => {
         if (currentData === null) {
-            // Room doesn't exist or was deleted. Abort transaction by returning undefined.
-            // We will throw an error in the .catch block later for user feedback.
-            // return;
             throw new Error(`Room ${roomCode} not found or access denied.`);
-
         }
 
         currentData.players = currentData.players || {};
         const existingPlayer = currentData.players[mp_currentUserId];
 
         if (existingPlayer) {
-            // --- REJOINING ---
             console.log(`MP Transaction: User ${mp_currentUserId} rejoining ${roomCode} as ${existingPlayer.role}.`);
-            // Update connection status (presence also handles this but good for immediate effect)
             currentData.players[mp_currentUserId].isConnected = true;
-            // DO NOT reset isReady on rejoin
-            joinedRole = existingPlayer.role; // Could be captainA, captainB, or spectator
-            joinedTeam = existingPlayer.team; // Store team (null for spectators)
+            joinedRole = existingPlayer.role;
+            joinedTeam = existingPlayer.team;
         } else {
-            // --- JOINING FIRST TIME ---
             console.log(`MP Transaction: User ${mp_currentUserId} joining ${roomCode} first time.`);
-
             const captainAUid = findCaptainUid(currentData.players, 'A');
             const captainBUid = findCaptainUid(currentData.players, 'B');
 
-            // Assign to captain slots if available
             if (!captainAUid) {
                  console.log(`MP Transaction: Assigning User ${mp_currentUserId} as Captain A.`);
                  currentData.players[mp_currentUserId] = {
                      displayName: `${mp_currentUserId.substring(0, 4)}`,
                      team: 'A', role: 'captain', isConnected: true,
-                     isReady: false // Start not ready
+                     isReady: false
                  };
                  joinedRole = 'captainA';
                  joinedTeam = 'A';
@@ -1537,54 +1538,42 @@ function joinRoom(roomCodeInput) {
                  currentData.players[mp_currentUserId] = {
                      displayName: `${mp_currentUserId.substring(0, 4)}`,
                      team: 'B', role: 'captain', isConnected: true,
-                     isReady: false // Start not ready
+                     isReady: false
                  };
                  joinedRole = 'captainB';
                  joinedTeam = 'B';
-            // *** START SPECTATOR CHANGE ***
             } else {
-                 // If both captain slots are taken, join as spectator
                  console.log(`MP Transaction: Assigning User ${mp_currentUserId} as Spectator.`);
                  currentData.players[mp_currentUserId] = {
                      displayName: `${mp_currentUserId.substring(0, 4)}`,
                      role: 'spectator',
                      isConnected: true,
-                     team: null // Spectators don't belong to a team
+                     team: null
                  };
                  joinedRole = 'spectator';
-                 // joinedTeam remains null
-            // *** END SPECTATOR CHANGE ***
             }
         }
-        return currentData; // Commit transaction
+        return currentData;
 
     }).then(() => {
-        // --- Transaction Committed ---
         console.log("MP: Join room transaction successful for room:", roomCode);
-
-        if (!joinedRole) { // Should not happen if logic above is correct
+        if (!joinedRole) {
              throw new Error("Internal error joining room: Role not assigned.");
         }
-
-        mp_playerRole = joinedRole; // Set role (captainA, captainB, or spectator)
+        mp_playerRole = joinedRole;
         mp_currentDraftId = roomCode;
-        updateMode(true); // Switch to MP mode UI
-
+        updateMode(true);
         sessionStorage.setItem('currentDraftId', mp_currentDraftId);
-        sessionStorage.setItem('playerRole', mp_playerRole); // Store role including spectator
-        updateUIAfterJoinCreate(mp_currentDraftId); // Update UI
-        subscribeToDraft(mp_currentDraftId);      // Listen for updates
-        setupPresence(mp_currentUserId);          // Set up presence
-
+        sessionStorage.setItem('playerRole', mp_playerRole);
+        updateUIAfterJoinCreate(mp_currentDraftId);
+        subscribeToDraft(mp_currentDraftId);
+        setupPresence(mp_currentUserId);
     }).catch((error) => {
-        // --- Transaction Failed ---
         console.error(`MP: Failed to join room ${roomCode}:`, error);
         alert(`Error joining room: ${error.message || 'Unknown error.'}`);
-        if (isMultiplayerMode) { // Revert UI if needed (e.g., failed rejoin attempt)
+        if (isMultiplayerMode) {
             leaveRoomCleanup();
         } else {
-            // If join fails from the 'local' state (e.g. trying to rejoin a deleted room),
-            // ensure the Reconnect/Cancel buttons are still shown if appropriate
             updateMultiplayerButtonStates();
         }
     });
@@ -1594,7 +1583,6 @@ function joinRoom(roomCodeInput) {
 function subscribeToDraft(draftId) {
     if (!db || !draftId) return;
 
-    // Unsubscribe from previous listener
     if (mp_draftSubscription) {
         try { mp_draftSubscription(); } catch(e) { console.warn("Error unsubscribing:", e); }
         mp_draftSubscription = null;
@@ -1604,7 +1592,6 @@ function subscribeToDraft(draftId) {
     console.log(`MP: Subscribing to draft ${draftId}`);
 
     mp_draftSubscription = onValue(draftRef, (snapshot) => {
-        // Check if still in this MP draft *before* processing
         if (!isMultiplayerMode || mp_currentDraftId !== draftId) {
             console.log(`MP: Received update for ${draftId}, but no longer in that draft. Ignoring & unsubscribing.`);
             if (mp_draftSubscription) {
@@ -1616,70 +1603,55 @@ function subscribeToDraft(draftId) {
 
         const data = snapshot.val();
         if (data) {
-            // --- Data Received ---
-            const previousStatus = mp_draftState?.status; // Get status before update
-            const previousActionStartTime = mp_draftState?.currentActionStartTime; // Get previous start time
-            mp_draftState = data; // Update local cache
+            const previousStatus = mp_draftState?.status;
+            const previousActionStartTime = mp_draftState?.currentActionStartTime;
+            mp_draftState = data;
 
-            // Update local role based on data (in case of swap or if initially spectator)
             const myPlayerData = data.players?.[mp_currentUserId];
             if (myPlayerData) {
-                 // Assign role based on data: captainA, captainB, or spectator
                  if (myPlayerData.role === 'captain') {
                      mp_playerRole = myPlayerData.team === 'A' ? 'captainA' : 'captainB';
                  } else if (myPlayerData.role === 'spectator') {
                      mp_playerRole = 'spectator';
                  } else {
-                     mp_playerRole = null; // Unknown role
+                     mp_playerRole = null;
                  }
-                 sessionStorage.setItem('playerRole', mp_playerRole); // Update session storage
+                 sessionStorage.setItem('playerRole', mp_playerRole);
             } else {
-                 // Player data might be missing if kicked or state issue
                  console.warn(`MP: Player data for ${mp_currentUserId} not found in received state for ${draftId}.`);
-                 // Consider leaving the room if player data is consistently missing?
-                 // For now, just clear the role locally.
                  mp_playerRole = null;
                  sessionStorage.removeItem('playerRole');
             }
 
-            renderMultiplayerUI(data); // Update the UI based on the new state
+            renderMultiplayerUI(data);
 
-            // Start/Stop Multiplayer Timer based on state change
             if (data.status === 'in_progress' && data.currentActionStartTime && data.currentActionStartTime !== previousActionStartTime) {
-                 // Timer should start or restart
                  startMultiplayerTimerFromState(data);
             } else if (data.status !== 'in_progress' && mp_timerIntervalId) {
-                 // Draft ended or paused, stop timer
                  stopTimer('multiplayer');
             } else if (data.settings?.timerEnabled === false && mp_timerIntervalId) {
-                // Timer was disabled while running
                 stopTimer('multiplayer');
             } else if (data.settings?.timerEnabled && data.status === 'in_progress' && data.currentActionStartTime && !mp_timerIntervalId) {
-                // Timer enabled, draft running, action started, but timer isn't running locally (e.g., after reconnect)
                 startMultiplayerTimerFromState(data);
             }
-
-
         } else {
-            // --- Data is Null (Room Deleted/Inaccessible) ---
             console.warn(`MP: Received null data for draft ${draftId}. Room deleted or inaccessible?`);
             if (isMultiplayerMode && mp_currentDraftId === draftId) {
                  alert(`Room ${draftId} closed or does not exist anymore.`);
-                 leaveRoomCleanup(); // Go back to local mode
+                 leaveRoomCleanup();
             }
-            if (mp_draftSubscription) { // Clean up listener
+            if (mp_draftSubscription) {
                  try { mp_draftSubscription(); } catch(e) { /* ignore */ }
                  mp_draftSubscription = null;
             }
         }
     }, (error) => {
-        // --- Subscription Error ---
         console.error(`MP: Firebase subscription error for ${draftId}:`, error);
         if (isMultiplayerMode && mp_currentDraftId === draftId) {
             alert("Connection error listening to draft. Check connection or refresh.");
-            leaveRoomCleanup(); // Go back to local mode on critical error
+            leaveRoomCleanup();
         }
-        if (mp_draftSubscription) { // Clean up listener
+        if (mp_draftSubscription) {
              try { mp_draftSubscription(); } catch(e) { /* ignore */ }
              mp_draftSubscription = null;
         }
@@ -1693,27 +1665,22 @@ function leaveRoomCleanup() {
 
     console.log(`MP: Initiating leave cleanup for ${leavingUserId} from ${leavingDraftId}`);
 
-    // --- 1. Update Firebase State (Mark disconnected, cancel disconnect hooks) ---
     if (db && leavingUserId && leavingDraftId) {
         const playerRef = ref(db, `drafts/${leavingDraftId}/players/${leavingUserId}`);
         const updates = {};
         updates[`/players/${leavingUserId}/isConnected`] = false;
 
-        // Reset ready state only if they were a captain
-        const currentRole = mp_playerRole; // Get role before clearing it
+        const currentRole = mp_playerRole;
         if (currentRole === 'captainA' || currentRole === 'captainB') {
             updates[`/players/${leavingUserId}/isReady`] = false;
-             // Also reset swap intent if leaving as captain
              if (currentRole === 'captainA') updates['/teamASwapIntent'] = false;
              if (currentRole === 'captainB') updates['/teamBSwapIntent'] = false;
         }
 
-        // Update player status and potentially captain-specific fields
         update(ref(db, `drafts/${leavingDraftId}`), updates)
             .then(() => console.log(`MP: Marked ${leavingUserId} as disconnected (and potentially reset ready/intent) in ${leavingDraftId}.`))
             .catch(err => console.warn("MP: Minor error marking self offline/resetting state:", err));
 
-        // Cancel the specific onDisconnect hook for this draft player object
         onDisconnect(playerRef).cancel()
              .then(() => console.log(`MP: Cancelled onDisconnect hook for draft ${leavingDraftId} player.`))
              .catch(err => console.warn("MP: Minor error cancelling draft player disconnect hook:", err));
@@ -1721,12 +1688,9 @@ function leaveRoomCleanup() {
         console.log("MP: Skipping Firebase state update on leave (DB/User/DraftID missing).");
     }
 
-    // --- 2. Reset Local Multiplayer State ---
-    resetMultiplayerState(); // Clears IDs, role, state, subscription, session storage, mp_matchHistory, stops MP timer
-
-    // --- 3. Switch Mode and Update UI ---
-    updateMode(false); // Switches mode flag, resets UI to local, updates buttons, clears history display, stops local timer
-    updateStatusMessage(); // Ensure status message reflects local mode
+    resetMultiplayerState();
+    updateMode(false);
+    updateStatusMessage();
     console.log("MP: Leave cleanup complete. Switched to local mode.");
 }
 
@@ -1734,35 +1698,29 @@ function leaveRoomCleanup() {
 function renderMultiplayerUI(data) {
     if (!isMultiplayerMode || !data) return;
 
-    // Update core UI elements based on new data
-    updateTeamNamesUI(); // Includes player status/readiness/swap/edit button display (passes draftStatus)
+    updateTeamNamesUI();
     updateStatusMessage();
     updateTeamDisplay();
-    updateCharacterPoolVisuals(); // Styles characters based on bans/picks/turn
+    updateCharacterPoolVisuals();
 
-    // Get references to dynamic buttons
     const startDraftBtn = document.getElementById('start-draft');
     const skipBanButton = document.getElementById('skip-ban');
     const leaveButton = document.getElementById('leave-room-button');
     const readyButton = document.getElementById('ready-button');
-    const configButton = document.getElementById('config-button'); // Get config button
+    const configButton = document.getElementById('config-button');
     const configPanel = document.getElementById('config');
-
 
     if (!startDraftBtn || !skipBanButton || !leaveButton || !readyButton || !configButton || !configPanel) {
         console.warn("MP renderMultiplayerUI: One or more control buttons or config panel missing.");
         return;
     }
 
-    // Determine current state variables
-    const draftStatus = data.status || 'setup'; // 'waiting', 'in_progress', 'complete'
+    const draftStatus = data.status || 'setup';
     const iAmCaptainA = mp_playerRole === 'captainA';
     const iAmCaptainB = mp_playerRole === 'captainB';
     const isSpectator = mp_playerRole === 'spectator';
     const isMyCaptainRole = iAmCaptainA || iAmCaptainB;
 
-
-    // Extract player info for easier access
     let playerA = null, playerB = null;
     let myPlayerData = null;
     let iAmReady = false;
@@ -1776,58 +1734,41 @@ function renderMultiplayerUI(data) {
                 if (p.team === 'B') playerB = p;
             }
         }
-        // Only captains can be ready
         iAmReady = isMyCaptainRole && myPlayerData?.isReady === true;
     }
     const bothConnected = playerA?.isConnected && playerB?.isConnected;
     const bothReady = playerA?.isReady && playerB?.isReady;
-
-
-    // --- Button and Config Logic based on Draft Status ---
-
     const isDraftActive = draftStatus === 'in_progress';
 
-    // Config Button & Panel Handling
-    configButton.style.display = isDraftActive ? 'none' : 'inline-block'; // Hide during draft
+    configButton.style.display = isDraftActive ? 'none' : 'inline-block';
     if (isDraftActive) {
-        configPanel.classList.add('hidden'); // Ensure panel is hidden if draft starts while it's open
+        configPanel.classList.add('hidden');
     }
-    // Enable config button only for Captain A when draft is NOT active
     configButton.disabled = isDraftActive || !iAmCaptainA;
-    // Disable config inputs if draft is active OR if user is not Captain A
-    updateConfigInputsState(isDraftActive || !iAmCaptainA, true); // Disable/Enable inputs, sync values from Firebase
+    updateConfigInputsState(isDraftActive || !iAmCaptainA, true);
 
-    // Ready Button
     const showReadyButton = !isDraftActive && !isSpectator && isMyCaptainRole;
-    readyButton.style.display = showReadyButton ? 'inline-block' : 'none'; // Hide during draft or if spectator
+    readyButton.style.display = showReadyButton ? 'inline-block' : 'none';
     if (showReadyButton) {
         readyButton.disabled = false;
         readyButton.textContent = iAmReady ? "Unready" : "Ready Up";
     }
 
-    // Start Draft Button (Visible for Captain A when draft NOT active)
     const showStartButton = !isDraftActive && iAmCaptainA;
     if (showStartButton) {
         startDraftBtn.style.display = 'inline-block';
-        // Enable only if NOT active AND both captains are connected AND ready
         startDraftBtn.disabled = !(bothConnected && bothReady);
         startDraftBtn.textContent = "Start Draft";
     } else {
         startDraftBtn.style.display = 'none';
     }
 
-    // Skip Ban Button (Visible and enabled for current captain during ban phase)
     const myTurn = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
     const showSkip = isDraftActive && data.currentPhase === 'ban' && myTurn && !isSpectator;
     skipBanButton.style.display = showSkip ? 'inline-block' : 'none';
     skipBanButton.disabled = !showSkip;
 
-    // Leave Room Button (Always visible in MP mode)
     leaveButton.classList.remove('hidden');
-
-    // Ensure Create/Join/Reconnect/Cancel remain hidden
-    // Note: updateMultiplayerButtonStates handles the initial state when *entering* MP mode.
-    // Here we ensure things stay hidden/disabled as needed based on the *current* MP state.
     disableMultiplayerJoinCreateButtons();
 }
 
@@ -1837,22 +1778,17 @@ function handleMultiplayerSelect(charName) {
         console.warn("MP Select cancelled: Conditions not met."); return;
     }
     const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-
-    // --- Capture state *before* transaction for history ---
-    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {})); // Deep copy
+    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {}));
     const teamBeforeUpdate = stateBeforeUpdate.currentTeam;
     const phaseBeforeUpdate = stateBeforeUpdate.currentPhase;
     const picksABeforeUpdate = [...(stateBeforeUpdate.teamAPicks || [])];
     const picksBBeforeUpdate = [...(stateBeforeUpdate.teamBPicks || [])];
-    // --- End capture ---
-
 
     runTransaction(draftRef, (currentData) => {
         if (!currentData) { console.warn("MP Select TXN: Draft data null."); return; }
         if (currentData.status !== 'in_progress') { console.log("MP Select TXN: Draft not in progress."); return; }
 
         const myPlayerData = currentData.players?.[mp_currentUserId];
-        // Check if player data exists and role is captain (already checked by initial guard, but good safety)
         if (!myPlayerData || myPlayerData.role !== 'captain') {
              console.log("MP Select TXN: Player data not found or not captain."); return;
         }
@@ -1862,21 +1798,9 @@ function handleMultiplayerSelect(charName) {
         if (!isMyTurn) { console.log("MP Select TXN: Not turn."); return; }
         if (!isCharValidSelectionMP(charName, currentData)) { console.log(`MP Select TXN: Invalid char ${charName}.`); return; }
 
-        // Optional: Check timer elapsed if strict enforcement is needed serverside
-        // const timerEnabled = currentData.settings?.timerEnabled ?? false;
-        // const timerDuration = currentData.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
-        // const actionStartTime = currentData.currentActionStartTime;
-        // if (timerEnabled && actionStartTime && Date.now() > (actionStartTime + timerDuration * 1000)) {
-        //      console.log("MP Select TXN: Timer elapsed. Action ignored.");
-        //      // Optionally force skip the turn here? Needs more complex state management.
-        //      return; // Abort transaction
-        // }
-
         currentData.bannedCharacters = currentData.bannedCharacters || [];
         currentData.teamAPicks = currentData.teamAPicks || [];
         currentData.teamBPicks = currentData.teamBPicks || [];
-        // REMOVED History update from Firebase state
-
         let updated = false;
 
         if (currentData.currentPhase === 'ban') {
@@ -1892,17 +1816,14 @@ function handleMultiplayerSelect(charName) {
         }
 
         if (updated) {
-            // --- Update client-side history immediately after confirming TXN will likely succeed ---
              recordAndDisplayMultiplayerMatchHistory(teamBeforeUpdate, phaseBeforeUpdate, charName, picksABeforeUpdate, picksBBeforeUpdate);
-            // --- End client-side history update ---
-            return calculateNextStateMP(currentData); // Calculate and return next state
+            return calculateNextStateMP(currentData);
         } else {
             console.warn("MP Select TXN: Update flag not set, phase invalid?");
-            return; // Abort if no update occurred
+            return;
         }
     }).catch((error) => {
         console.error("MP Select transaction failed:", error);
-        // Consider if history needs rollback here? Unlikely needed as it reflects attempt.
         notifyUser(`Selection Error: ${error.message}`, 3000);
     });
 }
@@ -1913,21 +1834,17 @@ function handleMultiplayerSkipBan() {
          console.warn("MP Skip Ban cancelled: Conditions not met."); return;
     }
     const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-
-    // --- Capture state *before* transaction for history ---
-    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {})); // Deep copy
+    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {}));
     const teamBeforeUpdate = stateBeforeUpdate.currentTeam;
     const phaseBeforeUpdate = stateBeforeUpdate.currentPhase;
-    const picksABeforeUpdate = [...(stateBeforeUpdate.teamAPicks || [])]; // Although not used for bans, maintain structure
+    const picksABeforeUpdate = [...(stateBeforeUpdate.teamAPicks || [])];
     const picksBBeforeUpdate = [...(stateBeforeUpdate.teamBPicks || [])];
-    // --- End capture ---
 
     runTransaction(draftRef, (currentData) => {
         if (!currentData) { console.warn("MP Skip Ban TXN: Draft data null."); return; }
         if (currentData.status !== 'in_progress' || currentData.currentPhase !== 'ban') { console.log("MP Skip Ban TXN: Not ban phase."); return; }
 
         const myPlayerData = currentData.players?.[mp_currentUserId];
-        // Check if player data exists and role is captain
         if (!myPlayerData || myPlayerData.role !== 'captain') {
              console.log("MP Skip Ban TXN: Player data not found or not captain."); return;
         }
@@ -1936,26 +1853,13 @@ function handleMultiplayerSkipBan() {
 
         if (!isMyTurn) { console.log("MP Skip Ban TXN: Not turn."); return; }
 
-        // Optional: Check timer elapsed
-        // const timerEnabled = currentData.settings?.timerEnabled ?? false;
-        // const timerDuration = currentData.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
-        // const actionStartTime = currentData.currentActionStartTime;
-        // if (timerEnabled && actionStartTime && Date.now() > (actionStartTime + timerDuration * 1000)) {
-        //     console.log("MP Skip TXN: Timer elapsed. Action ignored.");
-        //     return; // Abort transaction
-        // }
-
         currentData.bannedCharacters = currentData.bannedCharacters || [];
         const banIndex = currentData.bannedCharacters.length;
         const placeholder = `_skipped_ban_${expectedTeam}_${banIndex + 1}`;
-        currentData.bannedCharacters.push(placeholder); // Add placeholder to bans array
+        currentData.bannedCharacters.push(placeholder);
 
-        // REMOVED Firebase history recording
-        // --- Update client-side history ---
-         recordAndDisplayMultiplayerMatchHistory(teamBeforeUpdate, phaseBeforeUpdate, null, picksABeforeUpdate, picksBBeforeUpdate); // Pass null for skipped character
-        // --- End client-side history update ---
-
-        return calculateNextStateMP(currentData); // Calculate next state
+         recordAndDisplayMultiplayerMatchHistory(teamBeforeUpdate, phaseBeforeUpdate, null, picksABeforeUpdate, picksBBeforeUpdate);
+        return calculateNextStateMP(currentData);
     }).catch((error) => {
         console.error("MP Skip Ban transaction failed:", error);
         notifyUser(`Skip Ban Error: ${error.message}`, 3000);
@@ -1966,7 +1870,6 @@ function handleMultiplayerReadyUp() {
     if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !(mp_playerRole === 'captainA' || mp_playerRole === 'captainB')) {
          console.warn("MP Ready/Unready cancelled: Conditions not met."); return;
     }
-    // Allow toggling ready only when waiting or complete
     if (mp_draftState?.status !== 'waiting' && mp_draftState?.status !== 'complete') {
         console.log("MP Ready/Unready: Can only change ready state when 'waiting' or 'complete'.");
         return;
@@ -1975,10 +1878,8 @@ function handleMultiplayerReadyUp() {
     const playerRef = ref(db, `drafts/${mp_currentDraftId}/players/${mp_currentUserId}`);
     const currentReadyState = mp_draftState?.players?.[mp_currentUserId]?.isReady ?? false;
     const newReadyState = !currentReadyState;
-
     console.log(`MP: Player ${mp_currentUserId} setting ready state to ${newReadyState}.`);
 
-    // Also reset swap intent when changing ready state
     const updates = { isReady: newReadyState };
     if (mp_playerRole === 'captainA') updates['/teamASwapIntent'] = false;
     if (mp_playerRole === 'captainB') updates['/teamBSwapIntent'] = false;
@@ -1990,7 +1891,6 @@ function handleMultiplayerReadyUp() {
     })
         .then(() => {
             console.log(`MP: Player ${mp_currentUserId} ready state set to ${newReadyState} and swap intent reset.`);
-            // UI update happens via onValue listener
         })
         .catch((error) => {
             console.error(`MP: Failed to update ready status/reset intent for ${mp_currentUserId}:`, error);
@@ -2000,7 +1900,6 @@ function handleMultiplayerReadyUp() {
 
 
 function handleMultiplayerStartDraft() {
-    // Only Captain A can initiate
     if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || mp_playerRole !== 'captainA') {
          alert("Only Team A captain can start the draft when both are ready.");
          return;
@@ -2009,12 +1908,10 @@ function handleMultiplayerStartDraft() {
 
     runTransaction(draftRef, (currentData) => {
         if (!currentData) { console.warn("MP Start Draft TXN: Draft data null."); return; }
-        // Allow starting from 'waiting' or 'complete' state
         if (currentData.status !== 'waiting' && currentData.status !== 'complete') {
             console.log("MP Start Draft TXN: Can only start from 'waiting' or 'complete' status."); return;
         }
 
-        // Check readiness and connection of BOTH captains
         let playerA = null, playerB = null;
         let playerAUid = null, playerBUid = null;
         if (currentData.players) {
@@ -2030,36 +1927,28 @@ function handleMultiplayerStartDraft() {
             throw new Error("Both captains must be connected and ready to start.");
         }
 
-        // --- *** RESET LOGIC FOR STARTING A FRESH DRAFT *** ---
         console.log("MP Start Draft TXN: Resetting state for new draft.");
         currentData.teamAPicks = [];
         currentData.teamBPicks = [];
         currentData.bannedCharacters = [];
         currentData.pickOrderIndex = 0;
-        currentData.teamASwapIntent = false; // Reset swap intents
+        currentData.teamASwapIntent = false;
         currentData.teamBSwapIntent = false;
-        // Reset readiness for captains
         if (currentData.players) {
             if(playerAUid) currentData.players[playerAUid].isReady = false;
             if(playerBUid) currentData.players[playerBUid].isReady = false;
         }
-        // --- *** END RESET LOGIC *** ---
 
-        // --- Proceed with starting the draft ---
         currentData.status = 'in_progress';
-        // Use total bans from settings
         const maxTotalBans = currentData.settings?.maxTotalBans ?? 0;
         const startPhase = maxTotalBans > 0 ? 'ban' : 'pick';
         currentData.currentPhase = startPhase;
-        currentData.currentTeam = 'A'; // Team A always starts
-        currentData.currentActionStartTime = serverTimestamp(); // NEW: Set timer start time
+        currentData.currentTeam = 'A';
+        currentData.currentActionStartTime = serverTimestamp();
 
-        // --- Setup Client-Side History for New Draft ---
-        mp_matchHistory = []; // Clear previous client history array
-        createMultiplayerMatchHistoryEntry(); // Creates the new div container
-        // --- End Client-Side History Setup ---
-
-        return currentData; // Commit the changes
+        mp_matchHistory = [];
+        createMultiplayerMatchHistoryEntry();
+        return currentData;
     }).catch(err => {
         console.error("MP Failed to start draft transaction:", err);
         alert(`Failed to start draft: ${err.message}`);
@@ -2073,11 +1962,10 @@ function handleMultiplayerEditTeamName(event) {
     const button = event.target;
     const headingDiv = button.closest('div[id$="-heading"]');
     if (!headingDiv) return;
-    const teamId = headingDiv.id.includes('team-a') ? 'A' : 'B'; // A or B
+    const teamId = headingDiv.id.includes('team-a') ? 'A' : 'B';
     const nameSpan = headingDiv.firstChild;
     const currentName = nameSpan?.textContent?.replace('✎', '').trim() || (teamId === 'A' ? 'Team A' : 'Team B');
 
-    // Check permissions: Captain of team, and draft 'waiting' or 'complete'
     const myPlayerData = mp_draftState.players?.[mp_currentUserId];
     const draftStatus = mp_draftState.status;
     const canEdit = (myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (draftStatus === 'waiting' || draftStatus === 'complete'));
@@ -2088,7 +1976,7 @@ function handleMultiplayerEditTeamName(event) {
 
     const newName = prompt(`Enter new name for Team ${teamId}:`, currentName);
 
-    if (newName && newName.trim() !== "" && newName.trim().length <= 20) { // Increased limit back to 20
+    if (newName && newName.trim() !== "" && newName.trim().length <= 20) {
         const teamNameRef = ref(db, `drafts/${mp_currentDraftId}/team${teamId}Name`);
         set(teamNameRef, newName.trim())
             .then(() => console.log(`MP: Team ${teamId} name updated.`))
@@ -2098,38 +1986,45 @@ function handleMultiplayerEditTeamName(event) {
     }
 }
 
-// --- NEW: Handle Multiplayer Config Update ---
 function handleMultiplayerConfigUpdate(settingName, value) {
     if (!db || !isMultiplayerMode || !mp_currentDraftId || mp_playerRole !== 'captainA') {
          console.warn("MP Config Update cancelled: Conditions not met (not MP, no draft ID, or not Captain A).");
-         // Revert UI optimistically - Firebase listener will correct if update fails
-         updateConfigInputsState(false, true); // Sync from Firebase state
+         updateConfigInputsState(false, true);
          return;
     }
 
     const draftStatus = mp_draftState?.status;
     if (draftStatus !== 'waiting' && draftStatus !== 'complete') {
          console.warn("MP Config Update cancelled: Can only change config when waiting or complete.");
-          // Revert UI optimistically
-         updateConfigInputsState(false, true); // Sync from Firebase state
+         updateConfigInputsState(false, true);
          return;
     }
 
     console.log(`MP: Captain A updating setting '${settingName}' to '${value}'`);
 
+    // Ensure specific numeric conversions for certain settings
+    let processedValue = value;
+    if (settingName === 'maxTotalBans' || settingName === 'timerDuration') {
+        processedValue = parseInt(value);
+        if (isNaN(processedValue)) {
+            console.error(`MP Config Update: Invalid numeric value for ${settingName}: ${value}`);
+            updateConfigInputsState(false, true); // Revert UI
+            return;
+        }
+    }
+
+
     const settingRef = ref(db, `drafts/${mp_currentDraftId}/settings/${settingName}`);
-    set(settingRef, value)
+    set(settingRef, processedValue)
         .then(() => console.log(`MP: Setting '${settingName}' updated successfully.`))
         .catch((error) => {
             console.error(`MP: Failed to update setting '${settingName}':`, error);
             alert(`Error updating setting: ${settingName}. Please try again.`);
-             // Revert UI optimistically on failure
-             updateConfigInputsState(false, true); // Sync from Firebase state
+             updateConfigInputsState(false, true);
         });
 }
 
 
-// --- NEW: Handle Swap Intent Click ---
 function handleSwapIntentClick(event) {
     if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !mp_draftState || !(mp_playerRole === 'captainA' || mp_playerRole === 'captainB')) {
         console.warn("Swap Intent Click Ignored: Conditions not met.");
@@ -2143,7 +2038,7 @@ function handleSwapIntentClick(event) {
     }
 
     const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-    const myCurrentTeam = mp_playerRole === 'captainA' ? 'A' : 'B'; // Which team am I captain of?
+    const myCurrentTeam = mp_playerRole === 'captainA' ? 'A' : 'B';
 
     console.log(`Swap intent click by Captain ${myCurrentTeam}`);
 
@@ -2160,91 +2055,59 @@ function handleSwapIntentClick(event) {
         const onlyOneCaptain = (capAUid && !capBUid) || (!capAUid && capBUid);
         const bothCaptains = capAUid && capBUid;
 
-        // --- Scenario 1: Only one captain exists ---
         if (onlyOneCaptain) {
             const singleCaptainUid = capAUid || capBUid;
             const singleCaptainTeam = capAUid ? 'A' : 'B';
 
-            // Check if the user clicking is the single captain
             if (singleCaptainUid === mp_currentUserId && myCurrentTeam === singleCaptainTeam) {
                 console.log(`Swap TXN: Single captain ${singleCaptainTeam} initiating immediate swap.`);
-
-                // Perform the swap directly
-                // 1. Swap Team Names
                 const tempName = currentData.teamAName;
                 currentData.teamAName = currentData.teamBName;
                 currentData.teamBName = tempName;
-
-                // 2. Swap Team Picks (if complete)
                 if (currentData.status === 'complete') {
                     const tempPicks = currentData.teamAPicks;
                     currentData.teamAPicks = currentData.teamBPicks;
                     currentData.teamBPicks = tempPicks;
                 }
-
-                // 3. Update the single captain's team
                 if (currentData.players && currentData.players[singleCaptainUid]) {
-                    currentData.players[singleCaptainUid].team = (singleCaptainTeam === 'A' ? 'B' : 'A'); // Assign to the other team
+                    currentData.players[singleCaptainUid].team = (singleCaptainTeam === 'A' ? 'B' : 'A');
                 } else {
                     console.error("Swap TXN Error: Single captain player data missing during swap!");
-                    // Abort? For now, proceed but log error.
                 }
-
-                // 4. Reset Intents and Readiness
                 currentData.teamASwapIntent = false;
                 currentData.teamBSwapIntent = false;
                 if (currentData.players && currentData.players[singleCaptainUid]) {
                     currentData.players[singleCaptainUid].isReady = false;
                 }
-
             } else {
-                // This case might occur if the clicker is not the captain, or state is inconsistent.
                 console.warn("Swap TXN: Single captain exists, but clicker is not them or team mismatch. Aborting.");
-                // Reset intents just in case state is weird
                 currentData.teamASwapIntent = false;
                 currentData.teamBSwapIntent = false;
             }
-
-        // --- Scenario 2: Both captains exist ---
         } else if (bothCaptains) {
             console.log("Swap TXN: Both captains present, using intent logic.");
-
-            // Toggle my team's intent
             if (myCurrentTeam === 'A') {
                 currentData.teamASwapIntent = !currentData.teamASwapIntent;
-            } else { // myCurrentTeam === 'B'
+            } else {
                 currentData.teamBSwapIntent = !currentData.teamBSwapIntent;
             }
-
             console.log(`Swap TXN: Intent states - A: ${currentData.teamASwapIntent}, B: ${currentData.teamBSwapIntent}`);
-
-            // Check if both intents are now true
             if (currentData.teamASwapIntent && currentData.teamBSwapIntent) {
                 console.log("Swap TXN: Both intents true, performing swap!");
-
-                // Perform the swap
-                // 1. Swap Team Names
                 const tempName = currentData.teamAName;
                 currentData.teamAName = currentData.teamBName;
                 currentData.teamBName = tempName;
-
-                // 2. Swap Team Picks (if complete)
                 if (currentData.status === 'complete') {
                     const tempPicks = currentData.teamAPicks;
                     currentData.teamAPicks = currentData.teamBPicks;
                     currentData.teamBPicks = tempPicks;
                 }
-
-                // 3. Swap Captain Assignments
                 if (currentData.players && currentData.players[capAUid] && currentData.players[capBUid]) {
-                    currentData.players[capAUid].team = 'B'; // Captain A moves to Team B
-                    currentData.players[capBUid].team = 'A'; // Captain B moves to Team A
+                    currentData.players[capAUid].team = 'B';
+                    currentData.players[capBUid].team = 'A';
                 } else {
                     console.error("Swap TXN Error: Captain player data missing during swap!");
-                    // Abort transaction? Or proceed with partial swap? For now, proceed.
                 }
-
-                // 4. Reset Intents and Readiness
                 currentData.teamASwapIntent = false;
                 currentData.teamBSwapIntent = false;
                 if (currentData.players) {
@@ -2252,26 +2115,18 @@ function handleSwapIntentClick(event) {
                     if (currentData.players[capBUid]) currentData.players[capBUid].isReady = false;
                 }
             }
-            // If only one intent is true after toggle, do nothing else, just commit the toggle
-
-        // --- Scenario 3: No captains exist (or other weird state) ---
         } else {
             console.warn("Swap TXN: Neither single nor both captains found. Aborting swap logic.");
-            // Reset intents for safety
             currentData.teamASwapIntent = false;
             currentData.teamBSwapIntent = false;
         }
-
-        return currentData; // Commit changes (either intent toggle, full swap, or single swap)
+        return currentData;
     }).then(() => {
         console.log("Swap transaction completed.");
-        // UI update will happen via onValue listener, including role update if swapped
     }).catch((error) => {
         console.error("MP Swap transaction failed:", error);
         notifyUser(`Swap Error: ${error.message || 'Unknown error.'}`, 3000);
-        // Attempt to reset intent locally if the transaction fails badly
-        // This tries to reset the user's *own* intent flag directly as a fallback.
-        const draftRef = ref(db, `drafts/${mp_currentDraftId}`); // Need ref here too
+        const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
         const fallbackIntentUpdate = {};
          if (mp_playerRole === 'captainA') fallbackIntentUpdate['teamASwapIntent'] = false;
          else if (mp_playerRole === 'captainB') fallbackIntentUpdate['teamBSwapIntent'] = false;
@@ -2292,16 +2147,12 @@ function isCharValidSelectionMP(charName, data) {
     const picksB = data.teamBPicks || [];
     const hunterExclusivity = data.settings?.hunterExclusivity ?? true;
 
-    // Cannot select if banned (actual bans, ignore placeholders)
     if (bans.some(b => b === charName)) return false;
 
     if (phase === 'ban') {
-        // Cannot ban if picked
         return !picksA.includes(charName) && !picksB.includes(charName);
     } else if (phase === 'pick') {
-        // Check exclusivity
         if (hunterExclusivity && ((team === 'A' && picksB.includes(charName)) || (team === 'B' && picksA.includes(charName)))) return false;
-        // Check self-picks
         const myPicks = team === 'A' ? picksA : picksB;
         return !myPicks.includes(charName);
     }
@@ -2311,47 +2162,53 @@ function isCharValidSelectionMP(charName, data) {
 
 function calculateNextStateMP(currentData) {
     currentData.settings = currentData.settings || {};
-    const maxTotalBans = currentData.settings.maxTotalBans || 0; // Use total bans
+    const maxTotalBans = currentData.settings.maxTotalBans || 0;
     currentData.bannedCharacters = currentData.bannedCharacters || [];
     currentData.teamAPicks = currentData.teamAPicks || [];
     currentData.teamBPicks = currentData.teamBPicks || [];
-    // pickOrderIndex might still be useful for other logic, keep it if needed
-    // currentData.pickOrderIndex = (currentData.pickOrderIndex || 0) + 1;
 
     let phaseComplete = false;
 
     if (currentData.currentPhase === 'ban') {
         const bansMade = currentData.bannedCharacters.length;
-        if (bansMade >= maxTotalBans) { // Compare with total bans
+        if (bansMade >= maxTotalBans) {
             currentData.currentPhase = 'pick';
-            currentData.currentTeam = 'A'; // A starts pick
+            currentData.currentTeam = 'A';
             phaseComplete = true;
         } else {
-            currentData.currentTeam = currentData.currentTeam === 'A' ? 'B' : 'A'; // Alternate ban
+            currentData.currentTeam = currentData.currentTeam === 'A' ? 'B' : 'A';
             phaseComplete = true;
         }
     } else if (currentData.currentPhase === 'pick') {
         const totalPicksMade = currentData.teamAPicks.length + currentData.teamBPicks.length;
         if (totalPicksMade >= TOTAL_PICKS_NEEDED) {
-            currentData.status = 'complete'; // Set status to complete
+            currentData.status = 'complete';
             currentData.currentTeam = null;
             currentData.currentPhase = null;
-            currentData.currentActionStartTime = null; // Clear timer start time
-            // Reset swap intents on completion
+            currentData.currentActionStartTime = null;
             currentData.teamASwapIntent = false;
             currentData.teamBSwapIntent = false;
             phaseComplete = true;
-            // DO NOT reset picks/bans here, keep final state
-            // DO NOT reset readiness here, allow ready up for next game
         } else {
-             // Determine next picking team (A-BB-AA-BB-A)
-             const currentPickIndex = totalPicksMade -1; // 0-based index of the pick just made
-             // Indices where B picks next: 0, 1, 4, 5
-             // Indices where A picks next: 2, 3, 6
-            if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
-                currentData.currentTeam = 'B';
-            } else { // Indices 2, 3, 6
-                currentData.currentTeam = 'A';
+            const draftOrderType = currentData.settings?.draftOrderType || 'Snake';
+            const picksMadeCount = totalPicksMade; // Number of picks *already completed*
+
+            if (draftOrderType === 'Alt') {
+                // Alt order: A B B A B A A B
+                if (picksMadeCount === 1) currentData.currentTeam = 'B';      // After A's 1st
+                else if (picksMadeCount === 2) currentData.currentTeam = 'B'; // After B's 1st
+                else if (picksMadeCount === 3) currentData.currentTeam = 'A'; // After B's 2nd
+                else if (picksMadeCount === 4) currentData.currentTeam = 'B'; // After A's 2nd
+                else if (picksMadeCount === 5) currentData.currentTeam = 'A'; // After B's 3rd
+                else if (picksMadeCount === 6) currentData.currentTeam = 'A'; // After A's 3rd
+                else if (picksMadeCount === 7) currentData.currentTeam = 'B'; // After A's 4th
+            } else { // Default to Snake order: A-BB-AA-BB-A
+                const currentPickIndex = picksMadeCount -1; // 0-based index of the pick just made
+                if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
+                    currentData.currentTeam = 'B';
+                } else { // Indices 2, 3, 6
+                    currentData.currentTeam = 'A';
+                }
             }
             phaseComplete = true;
         }
@@ -2359,14 +2216,13 @@ function calculateNextStateMP(currentData) {
         console.error("MP calculateNextState: Invalid phase:", currentData.currentPhase);
     }
 
-    // If the phase was completed (a valid ban/pick was made or draft finished), update the timer start time
     if (phaseComplete && currentData.status === 'in_progress') {
         currentData.currentActionStartTime = serverTimestamp();
     } else if (currentData.status !== 'in_progress') {
-        currentData.currentActionStartTime = null; // Ensure it's null if draft isn't running
+        currentData.currentActionStartTime = null;
     }
 
-    return currentData; // Return modified state
+    return currentData;
 }
 
 
@@ -2380,32 +2236,20 @@ function setupPresence(userId) {
 
     onValue(connectedRef, (snapshot) => {
         const connected = snapshot.val();
+        if (connected === false) return;
 
-        if (connected === false) {
-            // Handled by global onDisconnect set below
-            return;
-        }
-
-        // --- When Connected ---
-        // 1. Set up global onDisconnect hook
         onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
-            // 2. Set global status to online
             set(userStatusDatabaseRef, isOnlineForDatabase);
-
-            // 3. Set up draft-specific presence *if* in MP mode
-            const currentDraftIdForHook = mp_currentDraftId; // Capture current values
+            const currentDraftIdForHook = mp_currentDraftId;
             const currentUserIdForHook = mp_currentUserId;
-             const currentPlayerRoleForHook = mp_playerRole; // Capture current role
+            const currentPlayerRoleForHook = mp_playerRole;
 
             if (isMultiplayerMode && currentDraftIdForHook && currentUserIdForHook) {
                  const playerRef = ref(db, `drafts/${currentDraftIdForHook}/players/${currentUserIdForHook}`);
                  const draftRootRef = ref(db, `drafts/${currentDraftIdForHook}`);
-
-                 // a. Set up draft-specific onDisconnect (sets disconnected, resets captain ready/intent)
                  const onDisconnectUpdates = {
                      [`/players/${currentUserIdForHook}/isConnected`]: false,
                  };
-                 // Only reset ready/intent if they are a captain on disconnect
                  if (currentPlayerRoleForHook === 'captainA') {
                      onDisconnectUpdates[`/players/${currentUserIdForHook}/isReady`] = false;
                      onDisconnectUpdates[`/teamASwapIntent`] = false;
@@ -2413,17 +2257,12 @@ function setupPresence(userId) {
                      onDisconnectUpdates[`/players/${currentUserIdForHook}/isReady`] = false;
                      onDisconnectUpdates[`/teamBSwapIntent`] = false;
                  }
-                 // Spectators just get marked as disconnected.
-
                  onDisconnect(draftRootRef).update(onDisconnectUpdates).then(() => {
-                     // b. Set draft-specific status to connected (don't force ready state here)
                      update(playerRef, { isConnected: true })
-                        .then(() => {/* console.log(`MP Presence: Draft ${currentDraftIdForHook} connected for ${userId}`); */})
                         .catch(err => console.warn(`MP Presence Error setting draft connected: ${err.message}`));
                  }).catch(err => console.error(`MP Presence Error setting draft onDisconnect:`, err));
             }
         }).catch(err => console.error("MP Presence Error setting global onDisconnect:", err));
-
     }, (error) => {
         console.error("MP Presence Error reading connection state:", error);
     });
@@ -2434,60 +2273,45 @@ function setupPresence(userId) {
 // ==================== EVENT DISPATCHER & LISTENERS ======================= //
 // ========================================================================= //
 
-// Central handler for character clicks
 function handleCharacterClick(charName) {
     if (isMultiplayerMode) handleMultiplayerSelect(charName);
     else handleLocalSelect(charName);
 }
 
-// NEW: Central handler for config button click
 function handleConfigButtonClick() {
     const configPanel = document.getElementById('config');
     if (!configPanel) return;
 
     if (isMultiplayerMode) {
-         // In MP mode, only Captain A can toggle when draft is not active
          const draftStatus = mp_draftState?.status;
          const canToggle = mp_playerRole === 'captainA' && (draftStatus === 'waiting' || draftStatus === 'complete');
          if (canToggle) {
-            // Ensure inputs reflect current Firebase state before showing
-             updateConfigInputsState(false, true); // Sync values, keep enabled
+             updateConfigInputsState(false, true);
              configPanel.classList.toggle('hidden');
          } else {
-             // If clicked by someone else or at the wrong time, ensure it's hidden
              configPanel.classList.add('hidden');
-             // Optionally notify user? console.log("Config cannot be changed now / by you.");
          }
     } else {
-        // In local mode, toggle if draft is not active
         if (!local_draftActive) {
             configPanel.classList.toggle('hidden');
         } else {
-             configPanel.classList.add('hidden'); // Ensure hidden if draft active
+             configPanel.classList.add('hidden');
         }
     }
 }
 
 
 function attachEventListeners() {
-    // Start Draft Button (Local/MP)
     document.getElementById('start-draft')?.addEventListener('click', () => {
         if (isMultiplayerMode) handleMultiplayerStartDraft(); else handleLocalStartDraft();
     });
 
-     // Skip Ban Button (Local/MP)
      document.getElementById('skip-ban')?.addEventListener('click', () => {
          if (isMultiplayerMode) handleMultiplayerSkipBan(); else handleLocalSkipBan();
      });
 
-    // Edit Team Name / Swap Intent Buttons (Event delegation handled in updateTeamNamesUI by assigning onclick)
-    // No direct listener needed here anymore as updateTeamNamesUI manages the button's behavior and handler.
-
-    // Config Panel Toggle Button (Uses central handler)
     document.getElementById('config-button')?.addEventListener('click', handleConfigButtonClick);
 
-
-    // --- Config Input Listeners (Handle Both Local and MP) ---
     document.getElementById('hunter-exclusivity')?.addEventListener('change', (e) => {
         const newValue = e.target.checked;
         if (isMultiplayerMode) {
@@ -2495,7 +2319,7 @@ function attachEventListeners() {
         } else if (!local_draftActive) {
             local_hunterExclusivity = newValue;
         } else {
-            e.target.checked = local_hunterExclusivity; // Revert UI if changed inappropriately
+            e.target.checked = local_hunterExclusivity;
         }
     });
 
@@ -2504,9 +2328,9 @@ function attachEventListeners() {
          if (isMultiplayerMode) {
              handleMultiplayerConfigUpdate('maxTotalBans', newValue);
          } else if (!local_draftActive) {
-             local_maxBansPerTeam = newValue / 2; // Store per team locally
+             local_maxBansPerTeam = newValue / 2;
          } else {
-             e.target.value = (local_maxBansPerTeam * 2).toString(); // Revert UI
+             e.target.value = (local_maxBansPerTeam * 2).toString();
          }
     });
 
@@ -2517,28 +2341,39 @@ function attachEventListeners() {
          } else if (!local_draftActive) {
              local_timerEnabled = newValue;
          } else {
-             e.target.checked = local_timerEnabled; // Revert UI
+             e.target.checked = local_timerEnabled;
          }
     });
 
     document.getElementById('timer-duration')?.addEventListener('change', (e) => {
          let newDuration = parseInt(e.target.value);
          if (isNaN(newDuration) || newDuration <= 0) {
-             newDuration = DEFAULT_TIMER_DURATION; // Reset to default if invalid
-             e.target.value = newDuration; // Correct the input display
+             newDuration = DEFAULT_TIMER_DURATION;
+             e.target.value = newDuration;
          }
-
          if (isMultiplayerMode) {
              handleMultiplayerConfigUpdate('timerDuration', newDuration);
          } else if (!local_draftActive) {
              local_timerDuration = newDuration;
          } else {
-              e.target.value = local_timerDuration; // Revert UI
+              e.target.value = local_timerDuration;
          }
     });
 
+    // NEW: Event listener for draft order type select
+    document.getElementById('draft-order-type-select')?.addEventListener('change', (e) => {
+        const newValue = e.target.value;
+        if (isMultiplayerMode) {
+            handleMultiplayerConfigUpdate('draftOrderType', newValue);
+        } else if (!local_draftActive) {
+            local_draftOrderType = newValue; // Update local state if not drafting
+        } else {
+            // Revert UI if changed inappropriately during a local draft
+            e.target.value = local_draftOrderType;
+        }
+    });
 
-    // --- Multiplayer Controls ---
+
     document.getElementById('create-room-button')?.addEventListener('click', createRoom);
     document.getElementById('join-room-button')?.addEventListener('click', () => {
         const joinContainer = document.getElementById('join-room-input-container');
@@ -2565,7 +2400,6 @@ function attachEventListeners() {
          handleMultiplayerReadyUp();
     });
 
-    // --- NEW LISTENERS for Reconnect/Cancel Session ---
     document.getElementById('reconnect-button')?.addEventListener('click', () => {
         const storedDraftId = sessionStorage.getItem('currentDraftId');
         if (storedDraftId && mp_currentUserId && !isMultiplayerMode) {
@@ -2573,7 +2407,7 @@ function attachEventListeners() {
             joinRoom(storedDraftId);
         } else {
             console.warn("Reconnect button clicked but conditions not met (no stored ID, not auth'd, or already in MP mode).");
-            updateMultiplayerButtonStates(); // Refresh buttons if state is weird
+            updateMultiplayerButtonStates();
         }
     });
 
@@ -2582,11 +2416,9 @@ function attachEventListeners() {
         sessionStorage.removeItem('currentDraftId');
         sessionStorage.removeItem('playerRole');
         notifyUser("Previous room session cancelled.", 2000);
-        // Refresh the button states - should now show Create/Join
         updateMultiplayerButtonStates();
-        updateStatusMessage(); // Update status message too
+        updateStatusMessage();
     });
-    // --- END NEW LISTENERS ---
 }
 
 // ========================================================================= //
@@ -2612,59 +2444,48 @@ function setupAuthentication() {
 }
 
 function handleAuthStateChange(user) {
-    if (user) { // Signed in
+    if (user) {
         console.log("handleAuthStateChange: Signed In. UID:", user.uid);
-        if (mp_currentUserId === user.uid) { // Likely token refresh
+        if (mp_currentUserId === user.uid) {
             console.log("handleAuthStateChange: UID matches existing. Likely token refresh.");
-            if (isMultiplayerMode) setupPresence(mp_currentUserId); // Ensure presence is active
-            updateMultiplayerButtonStates(); // Refresh buttons (handles all states)
+            if (isMultiplayerMode) setupPresence(mp_currentUserId);
+            updateMultiplayerButtonStates();
             return;
         }
 
-        // --- New Sign-in or UID change ---
         console.log(`handleAuthStateChange: New User/UID. Old: ${mp_currentUserId}, New: ${user.uid}`);
         mp_currentUserId = user.uid;
         authError = null;
-        setupPresence(mp_currentUserId); // Setup presence for new user
+        setupPresence(mp_currentUserId);
 
-        // --- Auto-rejoin logic DISABLED - Now handled by manual Reconnect button ---
-        if (!isMultiplayerMode) { // Only update buttons if not already in MP mode
+        if (!isMultiplayerMode) {
             const storedDraftId = sessionStorage.getItem('currentDraftId');
             if (storedDraftId) {
                  console.log(`handleAuthStateChange: Found session ${storedDraftId}. Auto-rejoin disabled, showing manual buttons.`);
-                 // No automatic joinRoom call here anymore
             } else {
                  console.log(`handleAuthStateChange: No session found. Showing standard Create/Join.`);
             }
-            // *** ALWAYS update buttons after auth state change when not in MP mode ***
-            // This will show Reconnect/Cancel OR Create/Join based on session storage check
             updateMultiplayerButtonStates();
-
         } else {
              console.log("handleAuthStateChange: Auth state changed while already in MP mode.");
-             // If auth changes *while in a room*, we might need to rejoin or clean up.
-             // For now, assume presence handles connection status, but a full rejoin might be needed.
-             // Let's just refresh buttons for now. If they lose their captaincy/spectator status due to UID change,
-             // the UI should reflect that after the next data update from Firebase.
              updateMultiplayerButtonStates();
-             // We might want to trigger a UI update based on the current state if the role might have changed
              if (mp_draftState) {
                 renderMultiplayerUI(mp_draftState);
              }
         }
-    } else { // Signed out
+    } else {
         console.log("handleAuthStateChange: User signed out.");
         if (isMultiplayerMode) {
              console.log("Auth lost while in MP mode. Cleaning up.");
-             leaveRoomCleanup(); // Resets state, unsubscribes, calls updateMode(false)
+             leaveRoomCleanup();
         } else {
              mp_currentUserId = null;
              authError = null;
              sessionStorage.removeItem('currentDraftId');
              sessionStorage.removeItem('playerRole');
-             updateMultiplayerButtonStates(); // Disable MP buttons / show connecting
-             enableLocalDraftControls(); // Ensure local usable
-             updateStatusMessage(); // Set local message
+             updateMultiplayerButtonStates();
+             enableLocalDraftControls();
+             updateStatusMessage();
         }
     }
 }
@@ -2677,30 +2498,30 @@ function initializeWebApp() {
     console.log("Initializing Web App...");
     createCharacterPoolElements();
 
-    // Read initial local config values
     const exclusivityCheck = document.getElementById('hunter-exclusivity');
     const banSelect = document.getElementById('ban-count');
     const timerEnabledCheck = document.getElementById('timer-enabled');
     const timerDurationInput = document.getElementById('timer-duration');
+    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
 
     const totalBans = banSelect ? parseInt(banSelect.value) : 2;
     local_maxBansPerTeam = totalBans / 2;
     local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
-    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false; // Default false
+    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false;
     local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
     if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION;
+    local_draftOrderType = draftOrderSelect ? draftOrderSelect.value : 'Snake'; // NEW
 
-    console.log("Initial Local Config:", { local_maxBansPerTeam, local_hunterExclusivity, local_timerEnabled, local_timerDuration });
+    console.log("Initial Local Config:", { local_maxBansPerTeam, local_hunterExclusivity, local_timerEnabled, local_timerDuration, local_draftOrderType }); // NEW: Added draftOrderType
 
-    // Ensure UI reflects default state
     if(timerEnabledCheck) timerEnabledCheck.checked = local_timerEnabled;
     if(timerDurationInput) timerDurationInput.value = local_timerDuration;
+    if(draftOrderSelect) draftOrderSelect.value = local_draftOrderType; // NEW
 
 
-    // Set initial mode to local, update UI
-    updateMode(false); // Starts in local mode, clears history display
+    updateMode(false);
     attachEventListeners();
-    setupAuthentication(); // Start auth, may trigger UI update via handleAuthStateChange
+    setupAuthentication();
     console.log("Initialization complete.");
 }
 
