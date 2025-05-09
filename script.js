@@ -1,48 +1,19 @@
-// Import Firebase modules directly
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js"; // Firebase init function
-import { getDatabase, ref, set, onValue, update, runTransaction, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, update, runTransaction, serverTimestamp, onDisconnect, push } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js"; 
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
-//import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-analytics.js";
 
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyDuUsQjopuBXF5XWx7G4ltX0JHB8bG6Miw", // Replace with your actual API key if necessary
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDuUsQjopuBXF5XWx7G4ltX0JHB8bG6Miw", 
     authDomain: "supervive-arena-draft.firebaseapp.com",
     databaseURL: "https://supervive-arena-draft-default-rtdb.firebaseio.com",
     projectId: "supervive-arena-draft",
-    storageBucket: "supervive-arena-draft.firebasestorage.app", // Corrected bucket name if needed
+    storageBucket: "supervive-arena-draft.firebasestorage.app",
     messagingSenderId: "104305383802",
     appId: "1:104305383802:web:53be19f7377e6e70a7dec3",
-    measurementId: "G-HTSJCRZTB5" // Corrected measurement ID if needed
+    measurementId: "G-HTSJCRZTB5"
 };
 
-
-// --- Initialize Firebase ---
-let app; // Firebase App instance
-let auth; // Firebase Auth service
-let db;   // Firebase RTDB service
-let authError = null; // Track auth specific errors
-
-try {
-    // Use the imported initializeApp here
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getDatabase(app);
-    //analytics = getAnalytics(app);
-} catch (error) {
-    console.error("Firebase initialization failed:", error);
-    authError = error; // Store error to prevent auth attempts
-    // Use a timeout to ensure the element exists if initialization fails early
-    setTimeout(() => {
-        const statusMsg = document.getElementById('status-message');
-        if (statusMsg) statusMsg.textContent = "Error connecting to services.";
-    }, 0);
-}
-
-
-// --- Constants and Global Data ---
 const CHARACTERS = [
-    // Character array remains the same...
     {name: 'Brall', icon: 'https://supervive.wiki.gg/images/thumb/f/fd/PortBrall.png/200px-PortBrall.png'},
     {name: 'Crysta', icon: 'https://supervive.wiki.gg/images/thumb/f/fd/PortCrysta.png/200px-PortCrysta.png'},
     {name: 'Carbine', icon: 'https://supervive.wiki.gg/images/thumb/4/46/PortCarbine.png/200px-PortCarbine.png'},
@@ -65,2467 +36,1030 @@ const CHARACTERS = [
     {name: 'Hudson', icon: 'https://supervive.wiki.gg/images/thumb/e/e6/PortHudson.png/200px-PortHudson.png'},
     {name: 'Void', icon: 'https://supervive.wiki.gg/images/thumb/6/65/PortVoid.png/200px-PortVoid.png'}
 ];
-const TOTAL_PICKS_NEEDED = 8; // Total picks across both teams
-const DEFAULT_TIMER_DURATION = 30; // Default timer duration in seconds
 
-// --- State Variables ---
-let isMultiplayerMode = false; // *** THE CORE MODE FLAG ***
-let local_currentPhase = 'setup';
-let local_currentTeam = 'A';
-let local_teamAPicks = [];
-let local_teamBPicks = [];
-let local_bannedCharacters = [];
-let local_matchHistory = []; // Array of strings for local history display
-let local_maxBansPerTeam = 1; // Default bans per team
-let local_gameCounter = 0;
-let local_draftActive = false;
-let local_hunterExclusivity = true;
-let local_draftOrderType = 'Snake'; // NEW: Draft Order Type for Local
-// --- NEW: Timer State (Local) ---
-let local_timerEnabled = false;
-let local_timerDuration = DEFAULT_TIMER_DURATION;
-let local_timerIntervalId = null;
-let local_timerEndTime = null; // Timestamp when the current timer ends
+// const CHARACTERS = [ // lighter weight for later
+//     {name: 'Brall', icon: 'https://supervive.wiki.gg/images/thumb/0/04/TX_CS_Portrait_Ronin.png/60px-TX_CS_Portrait_Ronin.png'},
+//     {name: 'Crysta', icon: 'https://supervive.wiki.gg/images/thumb/4/45/TX_CS_Portrait_BurstCaster.png/60px-TX_CS_Portrait_BurstCaster.png'},
+//     {name: 'Carbine', icon: 'https://supervive.wiki.gg/images/thumb/7/79/TX_CS_Portrait_BountyHunter.png/60px-TX_CS_Portrait_BountyHunter.png'},
+//     {name: 'Ghost', icon: 'https://supervive.wiki.gg/images/thumb/d/d7/TX_CS_Portrait_Assault.png/60px-TX_CS_Portrait_Assault.png'},
+//     {name: 'Jin', icon: 'https://supervive.wiki.gg/images/thumb/e/e5/TX_CS_Portrait_Stalker.png/60px-TX_CS_Portrait_Stalker.png'},
+//     {name: 'Joule', icon: 'https://supervive.wiki.gg/images/thumb/2/2c/TX_CS_Portrait_Storm.png/60px-TX_CS_Portrait_Storm.png'},
+//     {name: 'Myth', icon: 'https://supervive.wiki.gg/images/thumb/a/a2/TX_CS_Portrait_Huntress.png/60px-TX_CS_Portrait_Huntress.png'},
+//     {name: 'Saros', icon: 'https://supervive.wiki.gg/images/thumb/c/cf/TX_CS_Portrait_Saros.png/60px-TX_CS_Portrait_Saros.png'},
+//     {name: 'Shiv', icon: 'https://supervive.wiki.gg/images/thumb/b/b1/TX_CS_Portrait_Flex.png/60px-TX_CS_Portrait_Flex.png'},
+//     {name: 'Shrike', icon: 'https://supervive.wiki.gg/images/thumb/c/c5/TX_CS_Portrait_Sniper.png/60px-TX_CS_Portrait_Sniper.png'},
+//     {name: 'Bishop', icon: 'https://supervive.wiki.gg/images/thumb/8/81/TX_CS_Portrait_RocketJumper.png/60px-TX_CS_Portrait_RocketJumper.png'},
+//     {name: 'Kingpin', icon: 'https://supervive.wiki.gg/images/thumb/8/86/TX_CS_Portrait_HookGuy.png/60px-TX_CS_Portrait_HookGuy.png'},
+//     {name: 'Felix', icon: 'https://supervive.wiki.gg/images/thumb/3/3b/TX_CS_Portrait_Firefox.png/60px-TX_CS_Portrait_Firefox.png'},
+//     {name: 'Oath', icon: 'https://supervive.wiki.gg/images/thumb/d/d9/TX_CS_Portrait_ShieldBot.png/60px-TX_CS_Portrait_ShieldBot.png'},
+//     {name: 'Elluna', icon: 'https://supervive.wiki.gg/images/thumb/f/f3/TX_CS_Portrait_ResHealer.png/60px-TX_CS_Portrait_ResHealer.png'},
+//     {name: 'Eva', icon: 'https://supervive.wiki.gg/images/thumb/f/fe/TX_CS_Portrait_Succubus.png/60px-TX_CS_Portrait_Succubus.png'},
+//     {name: 'Zeph', icon: 'https://supervive.wiki.gg/images/thumb/8/8c/TX_CS_Portrait_BacklineHealer.png/60px-TX_CS_Portrait_BacklineHealer.png'},
+//     {name: 'Beebo', icon: 'https://supervive.wiki.gg/images/thumb/9/9b/TX_CS_Portrait_Beebo.png/60px-TX_CS_Portrait_Beebo.png'},
+//     {name: 'Celeste', icon: 'https://supervive.wiki.gg/images/thumb/e/ea/TX_CS_Portrait_Freeze.png/60px-TX_CS_Portrait_Freeze.png'},
+//     {name: 'Hudson', icon: 'https://supervive.wiki.gg/images/thumb/c/cb/TX_CS_Portrait_Gunner.png/60px-TX_CS_Portrait_Gunner.png'},
+//     {name: 'Void', icon: 'https://supervive.wiki.gg/images/thumb/5/54/TX_CS_Portrait_Void.png/60px-TX_CS_Portrait_Void.png'}
+// ];
 
-// --- Multiplayer Mode State ---
-let mp_currentUserId = null;
-let mp_currentDraftId = null;
-let mp_draftSubscription = null; // Function to unsubscribe
-let mp_playerRole = null; // 'captainA', 'captainB', 'spectator', null
-let mp_draftState = {}; // Holds the current state received from Firebase
-let mp_matchHistory = []; // *** NEW: Array for client-side MP history ***
-let mp_gameCounter = 0;   // *** NEW: Counter for client-side MP history divs ***
-// --- NEW: Timer State (Multiplayer - Managed Client-Side based on Firebase State) ---
-let mp_timerIntervalId = null;
-let mp_timerEndTime = null; // Timestamp when the current timer ends (calculated from Firebase)
+const TOTAL_PICKS_NEEDED = 8;
+const DEFAULT_TIMER_DURATION_SECONDS = 30;
 
-
-// ========================================================================= //
-// ========================== TIMER FUNCTIONS ============================== //
-// ========================================================================= //
-
-function stopTimer(mode = 'local') {
-    const timerDisplay = document.getElementById('timer-display');
-    if (mode === 'local') {
-        if (local_timerIntervalId) {
-            clearInterval(local_timerIntervalId);
-            local_timerIntervalId = null;
-            local_timerEndTime = null;
-        }
-    } else { // multiplayer
-        if (mp_timerIntervalId) {
-            clearInterval(mp_timerIntervalId);
-            mp_timerIntervalId = null;
-            mp_timerEndTime = null;
-        }
-    }
-     if (timerDisplay) {
-        timerDisplay.textContent = ''; // Clear display
-        timerDisplay.classList.remove('elapsed'); // Remove elapsed styling
-        timerDisplay.style.display = 'none'; // Hide timer
-    }
-}
-
-function updateTimerDisplay() {
-    const timerDisplay = document.getElementById('timer-display');
-    if (!timerDisplay) return;
-
-    let endTime = isMultiplayerMode ? mp_timerEndTime : local_timerEndTime;
-    if (endTime === null) {
-        timerDisplay.textContent = '';
-        timerDisplay.classList.remove('elapsed');
-        timerDisplay.style.display = 'none';
-        return;
-    }
-
-    const now = Date.now();
-    const remainingSeconds = Math.round((endTime - now) / 1000);
-
-    timerDisplay.style.display = 'block'; // Make sure timer is visible
-
-    if (remainingSeconds >= 0) {
-        timerDisplay.textContent = `${remainingSeconds}`;
-        timerDisplay.classList.remove('elapsed');
-    } else {
-        timerDisplay.textContent = `${remainingSeconds}`; // Show negative count
-        timerDisplay.classList.add('elapsed');
-    }
-}
-
-function startTimer(durationSeconds, mode = 'local') {
-    stopTimer(mode); // Ensure any existing timer is stopped
-
-    const endTime = Date.now() + durationSeconds * 1000;
-
-    if (mode === 'local') {
-        local_timerEndTime = endTime;
-        local_timerIntervalId = setInterval(() => {
-            updateTimerDisplay();
-            // Optional: Add logic here if something should happen exactly when local timer hits 0
-            // if (Date.now() >= local_timerEndTime && !document.getElementById('timer-display').classList.contains('elapsed')) {
-            //     // First moment it becomes elapsed
-            // }
-        }, 1000); // Update every second
-    } else { // multiplayer
-        mp_timerEndTime = endTime;
-        mp_timerIntervalId = setInterval(() => {
-            updateTimerDisplay();
-            // Optional: Add logic here if something should happen exactly when MP timer hits 0
-        }, 1000); // Update every second
-    }
-
-    updateTimerDisplay(); // Initial display update
-}
-
-// Specifically for multiplayer, starts the timer based on Firebase state
-function startMultiplayerTimerFromState(state) {
-    stopTimer('multiplayer'); // Stop any existing MP timer first
-
-    const timerEnabled = state?.settings?.timerEnabled ?? false;
-    const timerDuration = state?.settings?.timerDuration ?? DEFAULT_TIMER_DURATION;
-    const actionStartTime = state?.currentActionStartTime; // Timestamp from Firebase
-
-    const timerDisplay = document.getElementById('timer-display');
-
-    if (timerEnabled && actionStartTime && state.status === 'in_progress') {
-        // Calculate the theoretical end time based on when the action started and the duration
-        const expectedEndTime = actionStartTime + (timerDuration * 1000);
-        const now = Date.now(); // Use client's current time
-        const remainingMilliseconds = expectedEndTime - now;
-
-        if (remainingMilliseconds > -60000) { // Only start if not already > 1min elapsed
-             mp_timerEndTime = expectedEndTime; // Store the calculated end time
-             mp_timerIntervalId = setInterval(updateTimerDisplay, 1000);
-             updateTimerDisplay(); // Initial update
-        } else {
-            // Timer already significantly elapsed, don't start interval, just show final state
-            mp_timerEndTime = expectedEndTime;
-            updateTimerDisplay();
-        }
-    } else {
-         // Timer is disabled, action hasn't started, or draft not in progress
-         if(timerDisplay) {
-             timerDisplay.textContent = '';
-             timerDisplay.style.display = 'none';
-             timerDisplay.classList.remove('elapsed');
-         }
-    }
-}
-
-
-// ========================================================================= //
-// ========================== UTILITY FUNCTIONS ============================ //
-// ========================================================================= //
-
-function resetLocalState() {
-    local_currentPhase = 'setup';
-    local_currentTeam = 'A';
-    local_teamAPicks = [];
-    local_teamBPicks = [];
-    local_bannedCharacters = [];
-    local_matchHistory = []; // Clear local history strings
-    local_draftActive = false;
-    stopTimer('local'); // Stop local timer
-    // local_gameCounter is NOT reset here, only when a new game starts
-    // Don't reset config options like maxBansPerTeam, hunterExclusivity, timerEnabled, timerDuration, draftOrderType
-}
-
-function resetMultiplayerState() {
-     mp_currentDraftId = null;
-     if (mp_draftSubscription) {
-         try {
-             mp_draftSubscription(); // Call the unsubscribe function
-             console.log("MP: Unsubscribed from previous draft.");
-         } catch (e) {
-             console.warn("MP: Error unsubscribing from draft:", e);
-         }
-         mp_draftSubscription = null;
-     }
-     mp_playerRole = null;
-     mp_draftState = {}; // Clear the cached draft state
-     mp_matchHistory = []; // *** NEW: Clear client-side MP history ***
-     stopTimer('multiplayer'); // Stop multiplayer timer
-     // mp_gameCounter is NOT reset here, only when a new game starts
-     // Clear session storage related to multiplayer room
-     sessionStorage.removeItem('currentDraftId');
-     sessionStorage.removeItem('playerRole');
-}
-
-function updateMode(newMode) {
-    const previousMode = isMultiplayerMode;
-    isMultiplayerMode = newMode;
-    const historyContainer = document.getElementById('match-history-container');
-    stopTimer(previousMode ? 'multiplayer' : 'local'); // Stop timer for the mode we're leaving
-
-    if (previousMode && !newMode) {
-        // --- Switched FROM Multiplayer TO Local ---
-        resetMultiplayerState(); // Clears MP state and unsubscribes, stops MP timer
-        resetLocalState();       // Clears local draft progress (keeps settings), stops local timer
-        resetUIToLocal();        // Resets UI elements for local view
-        updateCharacterPoolVisuals(); // Update visuals for local state
-        enableLocalDraftControls(); // Enable local config/start buttons
-        updateMultiplayerButtonStates(); // Update MP buttons (should enable if auth'd)
-        if (historyContainer) {
-            historyContainer.style.display = 'block'; // Ensure history area is visible
-            historyContainer.querySelector('#match-history').innerHTML = ''; // Clear display
-        }
-    } else if (!previousMode && newMode) {
-        // --- Switched FROM Local TO Multiplayer ---
-        resetLocalState();        // Clears local draft progress, stops local timer
-        resetUIForMultiplayer();  // Sets up UI placeholders for MP
-        updateCharacterPoolVisuals(); // Update visuals for MP state (likely empty initially)
-        disableLocalDraftControls(); // Disable local config/start buttons
-        disableMultiplayerJoinCreateButtons(); // Disable Create/Join as we are now IN MP mode
-        if (historyContainer) {
-             historyContainer.style.display = 'block'; // Ensure history area is visible
-             historyContainer.querySelector('#match-history').innerHTML = ''; // Clear display
-        }
-    } else {
-         // Initial Load or No Change
-         if (!newMode) { // Initial load to local (or staying local)
-             resetUIToLocal();
-             enableLocalDraftControls();
-             updateMultiplayerButtonStates(); // Update MP buttons based on auth state
-             updateCharacterPoolVisuals(); // Update visuals for initial local state
-             if (historyContainer) historyContainer.style.display = 'block'; // Show local history
-         } else { // Initial load to MP (e.g., auto-rejoin) or staying MP
-             resetUIForMultiplayer(); // Ensure MP UI is set up
-             updateCharacterPoolVisuals(); // Update visuals for initial MP state
-             disableLocalDraftControls();
-             updateMultiplayerButtonStates(); // Ensure create/join stay disabled/hidden
-             if (historyContainer) historyContainer.style.display = 'block'; // Show MP history
-         }
-    }
-}
-
-// Helper function for clipboard notification
-function notifyUser(message, duration = 2000) {
-    const notificationsEl = document.getElementById('notifications');
-    notificationsEl.className = 'notification'; // Ensure CSS defines initial state
-    notificationsEl.textContent = message;
-    notificationsEl.style.display = 'block'; // Make sure the notification is visible
-
+let fbApp, fbAuth, fbDb, fbAuthError = null;
+try {
+    fbApp = initializeApp(FIREBASE_CONFIG);
+    fbAuth = getAuth(fbApp);
+    fbDb = getDatabase(fbApp);
+} catch (error) {
+    console.error("Firebase initialization failed:", error);
+    fbAuthError = error;
     setTimeout(() => {
-        notificationsEl.textContent = ''; // Clear the text after the timeout
-        notificationsEl.style.display = 'none'; // Hide the notification
-    }, duration);
+        if (DOMElements.statusMessage) DOMElements.statusMessage.textContent = "Error connecting to services.";
+    }, 0);
 }
 
-// Helper to find captain UID for a team
-function findCaptainUid(players, team) {
-    if (!players) return null;
-    for (const uid in players) {
-        if (players[uid].role === 'captain' && players[uid].team === team) {
-            return uid;
-        }
+const appState = {
+    isMultiplayerMode: false,
+    currentUserId: null,
+    authError: null, 
+    mpDraftSubscription: null, 
+
+    local: {
+        currentPhase: 'setup', 
+        currentTeam: 'A',
+        teamAPicks: [],
+        teamBPicks: [],
+        bannedCharacters: [],
+        matchHistory: [],
+        maxBansPerTeam: 1,
+        gameCounter: 0,
+        draftActive: false,
+        hunterExclusivity: true,
+        draftOrderType: 'Snake',
+        timerEnabled: false,
+        timerDuration: DEFAULT_TIMER_DURATION_SECONDS,
+        timerIntervalId: null,
+        timerEndTime: null,
+    },
+    multiplayer: {
+        currentDraftId: null,
+        playerRole: null, 
+        draftState: {}, // Raw state from Firebase, includes currentGameNumber and matchHistory object
+        timerIntervalId: null,
+        timerEndTime: null, 
     }
-    return null;
-}
+};
 
-// ========================================================================= //
-// ======================== UI UPDATE FUNCTIONS ============================ //
-// ========================================================================= //
+const DOMElements = {
+    teamAHeading: document.getElementById('team-a-heading'),
+    teamACaptain: document.getElementById('team-a-captain'),
+    teamAPicks: document.getElementById('team-a-picks'),
+    teamBHeading: document.getElementById('team-b-heading'),
+    teamBCaptain: document.getElementById('team-b-captain'),
+    teamBPicks: document.getElementById('team-b-picks'),
+    statusMessage: document.getElementById('status-message'),
+    timerDisplay: document.getElementById('timer-display'),
+    notifications: document.getElementById('notifications'),
+    characterPool: document.getElementById('character-pool'),
+    gameCounterDisplay: document.getElementById('game-counter'),
+    createRoomButton: document.getElementById('create-room-button'),
+    joinRoomButton: document.getElementById('join-room-button'),
+    reconnectButton: document.getElementById('reconnect-button'),
+    cancelSessionButton: document.getElementById('cancel-session-button'),
+    joinRoomInputContainer: document.getElementById('join-room-input-container'),
+    roomCodeInput: document.getElementById('room-code-input'),
+    joinRoomForm: document.getElementById('join-room-form'),
+    configButton: document.getElementById('config-button'),
+    readyButton: document.getElementById('ready-button'),
+    skipBanButton: document.getElementById('skip-ban'),
+    startDraftButton: document.getElementById('start-draft'),
+    leaveRoomButton: document.getElementById('leave-room-button'),
+    configPanel: document.getElementById('config'),
+    hunterExclusivityCheckbox: document.getElementById('hunter-exclusivity'),
+    banCountSelect: document.getElementById('ban-count'),
+    draftOrderTypeSelect: document.getElementById('draft-order-type-select'),
+    timerEnabledCheckbox: document.getElementById('timer-enabled'),
+    timerDurationInput: document.getElementById('timer-duration'),
+    matchHistoryContainer: document.getElementById('match-history-container'),
+    matchHistoryDisplay: document.getElementById('match-history'),
+    spectatorListContainer: document.getElementById('spectator-list-container'),
+    spectatorListDisplay: document.getElementById('spectator-list'),
+};
 
-// Creates the character pool elements ONCE on initial load.
-function createCharacterPoolElements() {
-    const pool = document.getElementById('character-pool');
-    if (!pool || pool.children.length > 0) {
-        console.log("Character pool already initialized or element not found.");
-        return; // Don't re-create if already populated or element missing
-    }
-    console.log("Creating character pool elements...");
+const UIUpdater = {
+    setText(element, text) { if (element) element.textContent = text; },
+    setHtml(element, html) { if (element) element.innerHTML = html; },
+    show(element, displayType = 'inline-block') { if (element) { element.classList.remove('hidden'); element.style.display = displayType; }},
+    hide(element) { if (element) { element.classList.add('hidden'); element.style.display = 'none'; }},
+    enable(element, condition = true) { if (element) element.disabled = !condition; }, 
+    disable(element, condition = true) { if (element) element.disabled = condition; },
+    toggleClass(element, className, force) { if (element) element.classList.toggle(className, force); },
+    setProperty(element, property, value) { if (element) element.style.setProperty(property, value); },
 
-    CHARACTERS.forEach(char => {
-        const charDiv = document.createElement('div');
-        charDiv.className = 'character';
-        charDiv.dataset.charName = char.name; // Store name in data attribute
+    notifyUser(message, duration = 2000) {
+        UIUpdater.setText(DOMElements.notifications, message);
+        DOMElements.notifications.className = 'notification';
+        UIUpdater.show(DOMElements.notifications, 'block');
+        setTimeout(() => {
+            UIUpdater.setText(DOMElements.notifications, '');
+            UIUpdater.hide(DOMElements.notifications);
+        }, duration);
+    },
 
-        const img = document.createElement('img');
-        img.src = char.icon;
-        img.alt = char.name;
-        img.loading = 'lazy';
-        charDiv.appendChild(img);
+    updateTimerDisplay() {
+        const timerDisplay = DOMElements.timerDisplay;
+        if (!timerDisplay) return;
+        const modeState = appState.isMultiplayerMode ? appState.multiplayer : appState.local;
+        const endTime = modeState.timerEndTime;
+        const timerShouldBeActive = appState.isMultiplayerMode ?
+            (modeState.draftState?.settings?.timerEnabled && modeState.draftState?.status === 'in_progress') :
+            (appState.local.timerEnabled && appState.local.draftActive);
 
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = char.name;
-        charDiv.appendChild(nameSpan);
-
-        // Add event listener using the central dispatcher
-        charDiv.addEventListener('click', () => handleCharacterClick(char.name));
-        pool.appendChild(charDiv);
-    });
-}
-
-
-function updateCharacterPoolVisuals() {
-    const pool = document.getElementById('character-pool');
-    if (!pool) return;
-
-    let bans = [];
-    let picksA = [];
-    let picksB = [];
-    let exclusivity = true;
-    let currentTeam = null;
-    let currentPhase = null;
-    let draftStatus = 'setup'; // 'setup', 'waiting', 'in_progress', 'complete'
-    let myTurn = false;
-    let isSpectator = false;
-
-    if (isMultiplayerMode && mp_draftState) {
-        const data = mp_draftState;
-        bans = data.bannedCharacters || [];
-        picksA = data.teamAPicks || [];
-        picksB = data.teamBPicks || [];
-        exclusivity = data.settings?.hunterExclusivity ?? true;
-        currentTeam = data.currentTeam;
-        currentPhase = data.currentPhase;
-        draftStatus = data.status || 'setup'; // Default to 'setup' if missing
-        const iAmCaptainA = mp_playerRole === 'captainA';
-        const iAmCaptainB = mp_playerRole === 'captainB';
-        isSpectator = mp_playerRole === 'spectator';
-        myTurn = !isSpectator && draftStatus === 'in_progress' && ((currentTeam === 'A' && iAmCaptainA) || (currentTeam === 'B' && iAmCaptainB));
-    } else if (!isMultiplayerMode) {
-        bans = local_bannedCharacters;
-        picksA = local_teamAPicks;
-        picksB = local_teamBPicks;
-        exclusivity = local_hunterExclusivity;
-        currentTeam = local_currentTeam;
-        currentPhase = local_currentPhase;
-        draftStatus = local_draftActive ? 'in_progress' : 'setup';
-        myTurn = true; // In local mode, it's always "your" turn
-        isSpectator = false;
-    }
-
-    // Iterate through existing character elements in the pool
-    pool.childNodes.forEach(node => {
-        // Skip non-element nodes
-        if (node.nodeType !== Node.ELEMENT_NODE || !node.classList.contains('character')) return;
-
-        const charDiv = node;
-        const charName = charDiv.dataset.charName;
-        if (!charName) return;
-
-        // Reset classes
-        charDiv.classList.remove('banned', 'selected', 'team-a-picked', 'team-b-picked', 'selectable', 'not-selectable', 'team-a-turn', 'team-b-turn');
-
-        const isBanned = bans.includes(charName);
-        const isPickedA = picksA.includes(charName);
-        const isPickedB = picksB.includes(charName);
-        let isSelectable = false;
-        let isValidChoice = false;
-
-        if (isBanned) charDiv.classList.add('banned');
-        if (isPickedA) {
-            if (exclusivity) charDiv.classList.add('selected');
-            charDiv.classList.add('team-a-picked');
+        if (endTime === null || !timerShouldBeActive) {
+            UIUpdater.setText(timerDisplay, '');
+            UIUpdater.toggleClass(timerDisplay, 'elapsed', false);
+            UIUpdater.hide(timerDisplay);
+            return;
         }
-        if (isPickedB) {
-            if (exclusivity) charDiv.classList.add('selected');
-            charDiv.classList.add('team-b-picked');
-        }
-
-        // Determine validity and selectability
-        if (draftStatus === 'in_progress') {
-             if (isMultiplayerMode) {
-                 isValidChoice = isCharValidSelectionMP(charName, mp_draftState);
-                 isSelectable = myTurn && isValidChoice; // Spectators cannot select
-             } else {
-                 isValidChoice = isCharValidSelectionLocal(charName);
-                 isSelectable = isValidChoice;
-             }
-             if (currentTeam) {
-                 charDiv.classList.add(currentTeam === 'A' ? 'team-a-turn' : 'team-b-turn');
-             }
-        } else { // Setup, Waiting, Complete
-             isSelectable = false;
-             isValidChoice = false;
-        }
-
-        // Apply classes
-        charDiv.classList.toggle('selectable', isSelectable);
-        // Only mark as not-selectable if draft is running and it's not selectable
-        charDiv.classList.toggle('not-selectable', draftStatus === 'in_progress' && !isSelectable);
-
-        // Adjust cursor
-        if (isSelectable) {
-            charDiv.style.cursor = 'pointer';
-        } else if (isBanned || (exclusivity && (isPickedA || isPickedB)) || draftStatus === 'complete' || isSpectator) {
-            charDiv.style.cursor = 'not-allowed'; // Spectators also get not-allowed
+        UIUpdater.show(timerDisplay, 'block');
+        const now = Date.now();
+        const remainingSeconds = Math.round((endTime - now) / 1000);
+        if (remainingSeconds >= 0) {
+            UIUpdater.setText(timerDisplay, `${remainingSeconds}`);
+            UIUpdater.toggleClass(timerDisplay, 'elapsed', false);
         } else {
+            UIUpdater.setText(timerDisplay, `${remainingSeconds}`);
+            UIUpdater.toggleClass(timerDisplay, 'elapsed', true);
+        }
+    },
+
+    updateTeamPicksDisplay(teamAPicks = [], teamBPicks = []) {
+        const characterMap = new Map(CHARACTERS.map(c => [c.name, c]));
+        const createPickHtml = (charName) => {
+            const char = characterMap.get(charName);
+            const iconSrc = char?.icon || '';
+            const altText = char?.name || 'Unknown';
+            return `<div class="character picked"><img src="${iconSrc}" alt="${altText}" loading="lazy"><span>${altText}</span></div>`;
+        };
+        UIUpdater.setHtml(DOMElements.teamAPicks, teamAPicks.map(createPickHtml).join(''));
+        UIUpdater.setHtml(DOMElements.teamBPicks, teamBPicks.map(createPickHtml).join(''));
+    },
+
+    updateCharacterPoolVisuals() {
+        const pool = DOMElements.characterPool;
+        if (!pool) return;
+        let bans, picksA, picksB, exclusivity, currentTeam, currentPhase, draftStatus, myTurn, isSpectator;
+        if (appState.isMultiplayerMode) {
+            const data = appState.multiplayer.draftState;
+            bans = data.bannedCharacters || []; picksA = data.teamAPicks || []; picksB = data.teamBPicks || [];
+            exclusivity = data.settings?.hunterExclusivity ?? true; currentTeam = data.currentTeam; currentPhase = data.currentPhase;
+            draftStatus = data.status || 'setup';
+            const iAmCaptainA = appState.multiplayer.playerRole === 'captainA'; const iAmCaptainB = appState.multiplayer.playerRole === 'captainB';
+            isSpectator = appState.multiplayer.playerRole === 'spectator';
+            myTurn = !isSpectator && draftStatus === 'in_progress' && ((currentTeam === 'A' && iAmCaptainA) || (currentTeam === 'B' && iAmCaptainB));
+        } else {
+            const local = appState.local;
+            bans = local.bannedCharacters; picksA = local.teamAPicks; picksB = local.teamBPicks; exclusivity = local.hunterExclusivity;
+            currentTeam = local.currentTeam; currentPhase = local.currentPhase; draftStatus = local.draftActive ? 'in_progress' : 'setup';
+            myTurn = true; isSpectator = false;
+        }
+        pool.childNodes.forEach(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE || !node.classList.contains('character')) return;
+            const charDiv = node; const charName = charDiv.dataset.charName; if (!charName) return;
+            charDiv.classList.remove('banned', 'selected', 'team-a-picked', 'team-b-picked', 'both-picked', 'selectable', 'not-selectable', 'team-a-turn', 'team-b-turn');
             charDiv.style.cursor = 'default';
+            const isBanned = bans.includes(charName); const isPickedA = picksA.includes(charName); const isPickedB = picksB.includes(charName);
+            let isSelectable = false; let isValidChoice = false; let mightBeSelectable = false;
+            if (isBanned) charDiv.classList.add('banned');
+            if (isPickedA) { if (exclusivity) charDiv.classList.add('selected'); charDiv.classList.add('team-a-picked');}
+            if (isPickedB) { if (exclusivity) charDiv.classList.add('selected'); charDiv.classList.add('team-b-picked');}
+            if (isPickedA && isPickedB) {if (!exclusivity) charDiv.classList.add('selected'); charDiv.classList.add('both-picked'); }
+            if (draftStatus === 'in_progress') {
+                isValidChoice = DraftLogic.isCharValidSelection(charName, currentPhase, currentTeam, picksA, picksB, bans, exclusivity);
+                isSelectable = myTurn && isValidChoice;
+                mightBeSelectable = !myTurn && isValidChoice;
+                if (currentTeam) charDiv.classList.add(currentTeam === 'A' ? 'team-a-turn' : 'team-b-turn');
+            }
+            charDiv.classList.toggle('selectable', isSelectable);
+            charDiv.classList.toggle('not-selectable', draftStatus === 'in_progress' && !isSelectable);
+            if (isSelectable) charDiv.style.cursor = 'pointer';
+            if (mightBeSelectable) charDiv.style.cursor = 'wait';
+            else if (isBanned || (exclusivity && (isPickedA || isPickedB)) || draftStatus === 'complete' || isSpectator) charDiv.style.cursor = 'not-allowed';
+        });
+    },
+    
+    updateStatusMessageText() {
+        const messageEl = DOMElements.statusMessage; if (!messageEl) return;
+        if (appState.isMultiplayerMode) {
+            const data = appState.multiplayer.draftState; const playerRole = appState.multiplayer.playerRole; const isSpectator = playerRole === 'spectator';
+            if (!appState.multiplayer.currentDraftId) { messageEl.textContent = fbAuthError ? "Connection Error" : (appState.currentUserId ? "Select or Create Room" : "Connecting..."); return; }
+            if (!data || !data.status) { if (appState.multiplayer.currentDraftId && Object.keys(data).length === 0 && !appState.mpDraftSubscription) { messageEl.textContent = `Room ${appState.multiplayer.currentDraftId} closed or not found.`; } else { messageEl.textContent = "Loading room data..."; } return; }
+            switch (data.status) {
+                case 'waiting':
+                    const players = data.players || {}; let playerA = null, playerB = null;
+                    for (const uid in players) { if (players[uid].role === 'captain') { if (players[uid].team === 'A') playerA = players[uid]; if (players[uid].team === 'B') playerB = players[uid];}}
+                    let statusText = isSpectator ? 'Spectating - Waiting...' : 'Waiting...';
+                    const capAConnected = playerA?.isConnected; const capBConnected = playerB?.isConnected; const capAReady = playerA?.isReady; const capBReady = playerB?.isReady;
+                    if (playerA && playerB) {
+                        if (capAReady && capBReady) statusText = (capAConnected && capBConnected) ? (isSpectator ? "Spectating - Both ready!" : "Both ready! Captain A can start.") : (isSpectator ? "Spectating - Both ready! Waiting for connection..." : "Both ready! Waiting for connection...");
+                        else if (capAReady) statusText = isSpectator ? `Spectating - Captain A ready. Waiting for B...` : `Captain A ready. Captain B ${capBConnected ? 'not ready' : 'not connected'}...`;
+                        else if (capBReady) statusText = isSpectator ? `Spectating - Captain B ready. Waiting for A...` : `Captain B ready. Captain A ${capAConnected ? 'not ready' : 'not connected'}...`;
+                        else statusText = isSpectator ? `Spectating - Waiting for captains...` : `Waiting for captains ${capAConnected && capBConnected ? 'to ready up' : 'to connect'}...`;
+                        if (data.teamASwapIntent && data.teamBSwapIntent) statusText += " Swap requested by both!";
+                        else if (data.teamASwapIntent) statusText += ` S${data.teamAName || 'Team A'} requests swap.`;
+                        else if (data.teamBSwapIntent) statusText += ` ${data.teamBName || 'Team B'} requests swap.`;
+                    } else if (playerA) statusText = isSpectator ? "Spectating - Waiting for Captain B..." : "Waiting for Captain B to join...";
+                    else if (playerB) statusText = isSpectator ? "Spectating - Waiting for Captain A..." : "Waiting for Captain A to join...";
+                    else statusText = isSpectator ? "Spectating - Waiting for Captain A..." : "Waiting for Captain A...";
+                    messageEl.textContent = statusText; break;
+                case 'in_progress':
+                    if (!data.currentTeam || !data.currentPhase) { messageEl.textContent = isSpectator ? 'Spectating - Draft Starting...' : 'Draft Starting...'; return; }
+                    const teamName = data.currentTeam === 'A' ? (data.teamAName || 'Team A') : (data.teamBName || 'Team B');
+                    const phaseText = data.currentPhase === 'ban' ? 'BAN' : 'PICK';
+                    const iAmCaptainA = playerRole === 'captainA'; const iAmCaptainB = playerRole === 'captainB';
+                    const turnPlayer = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
+                    messageEl.textContent = `${isSpectator ? 'Spectating: ' : ''}${teamName} - ${phaseText}${turnPlayer ? ' (YOUR TURN)' : ''}`; break;
+                case 'complete':
+                    const draftNum = data.currentGameNumber || 1;
+                    let completeStatus = `${isSpectator ? 'Spectating - ' : ''}Complete! Waiting next...`;
+                    if (data.teamASwapIntent && data.teamBSwapIntent) completeStatus += " Swap requested by both!";
+                    else if (data.teamASwapIntent) completeStatus += ` ${data.teamAName || 'Team A'} requests swap.`;
+                    else if (data.teamBSwapIntent) completeStatus += ` ${data.teamBName || 'Team B'} requests swap.`;
+                    messageEl.textContent = completeStatus; break;
+                default: messageEl.textContent = `${isSpectator ? 'Spectating - ' : ''}Status: ${data.status || 'Unknown'}`; break;
+            }
+        } else { 
+            if (!appState.local.draftActive) {
+                const storedDraftId = sessionStorage.getItem('currentDraftId');
+                if (!appState.currentUserId) messageEl.textContent = "Connecting...";
+                else if (!storedDraftId) messageEl.textContent = 'Configure and start local or online draft';
+                else messageEl.textContent = `Previous session detected`;
+            } else {
+                const teamId = appState.local.currentTeam.toLowerCase(); const teamHeading = DOMElements[`team${teamId}Heading`];
+                const teamName = teamHeading?.firstChild?.textContent?.replace(/[🔄✎]/, '').trim() || `Team ${appState.local.currentTeam}`;
+                const phaseText = appState.local.currentPhase === 'ban' ? 'BAN' : 'PICK';
+                messageEl.textContent = `${teamName} - ${phaseText}`;
+            }
         }
-    });
-}
-
-
-function updateTeamDisplay() {
-    const teamADiv = document.getElementById('team-a-picks');
-    const teamBDiv = document.getElementById('team-b-picks');
-    if (!teamADiv || !teamBDiv) return;
-
-    let picksA = [];
-    let picksB = [];
-
-    if (isMultiplayerMode && mp_draftState) {
-        picksA = mp_draftState.teamAPicks || [];
-        picksB = mp_draftState.teamBPicks || [];
-    } else if (!isMultiplayerMode) {
-        picksA = local_teamAPicks;
-        picksB = local_teamBPicks;
-    }
-
-    // Cache character lookups
-    const characterMap = new Map(CHARACTERS.map(c => [c.name, c]));
-
-    const createPickHtml = (charName) => {
-         const char = characterMap.get(charName);
-         const iconSrc = char?.icon || ''; // Default placeholder if needed
-         const altText = char?.name || 'Unknown';
-         return `<div class="character picked"><img src="${iconSrc}" alt="${altText}" loading="lazy"><span>${altText}</span></div>`;
-    };
-
-    teamADiv.innerHTML = picksA.map(createPickHtml).join('');
-    teamBDiv.innerHTML = picksB.map(createPickHtml).join('');
-}
-
-function updateStatusMessage() {
-     const messageEl = document.getElementById('status-message');
-     if (!messageEl) return;
-
-     if (isMultiplayerMode) {
-         const data = mp_draftState;
-         const isSpectator = mp_playerRole === 'spectator';
-
-         // Handle connection/initial states
-         if (!mp_currentDraftId) {
-              messageEl.textContent = authError ? "Connection Error" : (mp_currentUserId ? "Select or Create Room" : "Connecting...");
-              return;
-         }
-         if (!data || !data.status) {
-             const roomCodeDisplay = document.getElementById('display-room-code'); // Element might not exist
-             // Check if draft ID exists but data is missing/empty (room deleted or invalid)
-             if (mp_currentDraftId && Object.keys(mp_draftState).length === 0 && !mp_draftSubscription) {
-                 messageEl.textContent = `Room ${roomCodeDisplay?.textContent || mp_currentDraftId} closed or not found.`;
-             } else {
-                 messageEl.textContent = "Loading room data...";
-             }
-             return;
-         }
-
-         // Handle different draft statuses
-         switch (data.status) {
-              case 'waiting':
-                   const players = data.players || {};
-                   let playerA = null, playerB = null;
-                   for (const uid in players) {
-                       if (players[uid].role === 'captain') {
-                           if (players[uid].team === 'A') playerA = players[uid];
-                           if (players[uid].team === 'B') playerB = players[uid];
-                       }
-                   }
-                   let statusText = isSpectator ? 'Spectating - Waiting...' : 'Waiting...';
-                   const capAConnected = playerA?.isConnected;
-                   const capBConnected = playerB?.isConnected;
-                   const capAReady = playerA?.isReady;
-                   const capBReady = playerB?.isReady;
-
-                   if (playerA && playerB) {
-                       if (capAReady && capBReady) {
-                           statusText = (capAConnected && capBConnected) ? (isSpectator ? "Spectating - Both ready!" : "Both ready! Captain A can start.") : (isSpectator ? "Spectating - Both ready! Waiting for connection..." : "Both ready! Waiting for connection...");
-                       } else if (capAReady) {
-                           statusText = isSpectator ? `Spectating - Captain A ready. Waiting for B...` : `Captain A ready. Captain B ${capBConnected ? 'not ready' : 'not connect'}...`;
-                       } else if (capBReady) {
-                           statusText = isSpectator ? `Spectating - Captain B ready. Waiting for A...` : `Captain B ready. Captain A ${capAConnected ? 'not ready' : 'not connected'}...`;
-                       } else {
-                            statusText = isSpectator ? `Spectating - Waiting for captains...` : `Waiting for captains ${capAConnected && capBConnected ? 'to ready up' : 'to connect'}...`;
-                       }
-                       // Add swap intent status
-                       if (data.teamASwapIntent && data.teamBSwapIntent) {
-                           statusText += " Swap requested by both!";
-                       } else if (data.teamASwapIntent) {
-                            statusText += " Swap requested by A.";
-                       } else if (data.teamBSwapIntent) {
-                            statusText += " Swap requested by B.";
-                       }
-                   } else if (playerA) {
-                       statusText = isSpectator ? "Spectating - Waiting for Captain B..." : "Waiting for Captain B to join...";
-                   } else if (playerB) {
-                       statusText = isSpectator ? "Spectating - Waiting for Captain A..." : "Waiting for Captain A to join...";
-                   } else {
-                       statusText = isSpectator ? "Spectating - Waiting for Captain A..." : "Waiting for Captain A...";
-                   }
-                   messageEl.textContent = statusText;
-                   break;
-              case 'in_progress':
-                   if (!data.currentTeam || !data.currentPhase) {
-                       messageEl.textContent = isSpectator ? 'Spectating - Draft Starting...' : 'Draft Starting...';
-                       return;
-                   }
-                   const teamName = data.currentTeam === 'A' ? (data.teamAName || 'Team A') : (data.teamBName || 'Team B');
-                   const phaseText = data.currentPhase === 'ban' ? 'BAN' : 'PICK';
-                   const iAmCaptainA = mp_playerRole === 'captainA';
-                   const iAmCaptainB = mp_playerRole === 'captainB';
-                   const turnPlayer = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
-                   messageEl.textContent = `${isSpectator ? 'Spectating: ' : ''}${teamName} - ${phaseText}${turnPlayer ? ' (YOUR TURN)' : ''}`;
-                   break;
-              case 'complete':
-                   // Use the client-side game counter for display consistency
-                   const draftNum = mp_gameCounter || 1;
-                   let completeStatus = `${isSpectator ? 'Spectating - ' : ''}Draft ${draftNum} Complete! Waiting to start next...`;
-                    // Add swap intent status
-                    if (data.teamASwapIntent && data.teamBSwapIntent) {
-                        completeStatus += " Swap requested by both!";
-                    } else if (data.teamASwapIntent) {
-                        completeStatus += ` Swap requested by ${data.teamAName}.`;
-                    } else if (data.teamBSwapIntent) {
-                        completeStatus += ` Swap requested by ${data.teamBName}.`;
-                    }
-                   messageEl.textContent = completeStatus;
-                   break;
-              default:
-                   messageEl.textContent = `${isSpectator ? 'Spectating - ' : ''}Status: ${data.status || 'Unknown'}`;
-                   break;
-         }
-     } else { // Local Mode
-         if (!local_draftActive) {
-             // Status message handled by updateMultiplayerButtonStates when previous session detected
-             const storedDraftId = sessionStorage.getItem('currentDraftId');
-             if (!mp_currentUserId) {
-                 messageEl.textContent = "Connecting...";
-             } else if (!storedDraftId) {
-                 messageEl.textContent = '';
-             } else {
-                 messageEl.textContent = `Previous session detected`;
-             }
-         } else {
-              const teamHeading = document.getElementById(`team-${local_currentTeam.toLowerCase()}-heading`);
-              const teamName = teamHeading?.firstChild?.textContent?.replace('✎', '').trim() || `Team ${local_currentTeam}`;
-              const phaseText = local_currentPhase === 'ban' ? 'BAN' : 'PICK';
-              messageEl.textContent = `${teamName} - ${phaseText}`;
-         }
-     }
-}
-
-
-function updateTeamNamesUI() {
-     const teamAHeadingDiv = document.getElementById('team-a-heading');
-     const teamBHeadingDiv = document.getElementById('team-b-heading');
-     const teamACaptainElement = document.getElementById('team-a-captain');
-     const teamBCaptainElement = document.getElementById('team-b-captain');
-
-     if (!teamAHeadingDiv || !teamBHeadingDiv) return;
-
-     if (isMultiplayerMode && mp_draftState) {
-         const data = mp_draftState;
-         const teamAName = (data?.teamAName || 'Team A');
-         const teamBName = (data?.teamBName || 'Team B');
-         const draftStatus = data?.status || 'setup';
-         const canSwapOrEdit = (draftStatus === 'waiting' || draftStatus === 'complete');
-
-         updatePlayerStatusUI(data?.players || {}, draftStatus); // Pass draftStatus
-
-         const myPlayerData = data.players?.[mp_currentUserId];
-         const myTeam = myPlayerData?.team;
-         const myRole = myPlayerData?.role;
-         const iAmCaptain = myRole === 'captain';
-         const isSpectator = myRole === 'spectator';
-
-         // --- Team A Heading/Button ---
-         const buttonA = teamAHeadingDiv.querySelector('button');
-         if(buttonA) {
-             buttonA.className = ''; // Clear existing classes
-             buttonA.innerHTML = ''; // Clear content
-             buttonA.onclick = null; // Remove previous listener
-             buttonA.disabled = true;
-             buttonA.style.cursor = 'default';
-             buttonA.classList.remove('swap-pending'); // Ensure pending class is removed initially
-             buttonA.style.display = 'none'; // Hide by default for MP
-
-             if (canSwapOrEdit && iAmCaptain) { // Only show for captains when applicable
-                 buttonA.style.display = 'inline-block'; // Make visible
-                 if (myTeam === 'A') { // I am Captain A
-                     buttonA.innerHTML = '✎'; // Edit own team name
-                     buttonA.className = 'edit-team-name';
-                     buttonA.onclick = handleMultiplayerEditTeamName;
-                     buttonA.disabled = draftStatus !== 'waiting' && draftStatus !== 'complete'; // Allow edit in waiting or complete
-                     buttonA.style.cursor = buttonA.disabled ? 'not-allowed' : 'pointer';
-                 } else if (myTeam === 'B') { // I am Captain B, viewing Team A
-                     buttonA.innerHTML = '🔄'; // Swap intent
-                     buttonA.className = 'swap-intent-button';
-                     buttonA.onclick = handleSwapIntentClick;
-                     buttonA.disabled = false;
-                     buttonA.style.cursor = 'pointer';
-                     if (data.teamBSwapIntent) { // If *my* (B's) intent is set for swapping
-                         buttonA.classList.add('swap-pending');
-                     }
-                 }
-             }
-             // Set team name (always)
-             teamAHeadingDiv.firstChild.textContent = teamAName + ' '; // Ensure space before button
-         } else {
-             teamAHeadingDiv.firstChild.textContent = teamAName; // No button? Just show name
-         }
-
-
-         // --- Team B Heading/Button ---
-         const buttonB = teamBHeadingDiv.querySelector('button');
-          if(buttonB) {
-             buttonB.className = ''; // Clear existing classes
-             buttonB.innerHTML = ''; // Clear content
-             buttonB.onclick = null; // Remove previous listener
-             buttonB.disabled = true;
-             buttonB.style.cursor = 'default';
-             buttonB.classList.remove('swap-pending'); // Ensure pending class is removed initially
-             buttonB.style.display = 'none'; // Hide by default for MP
-
-             if (canSwapOrEdit && iAmCaptain) { // Only show for captains when applicable
-                 buttonB.style.display = 'inline-block'; // Make visible
-                 if (myTeam === 'B') { // I am Captain B
-                     buttonB.innerHTML = '✎'; // Edit own team name
-                     buttonB.className = 'edit-team-name';
-                     buttonB.onclick = handleMultiplayerEditTeamName;
-                     buttonB.disabled = draftStatus !== 'waiting' && draftStatus !== 'complete'; // Only allow edit in waiting
-                     buttonB.style.cursor = buttonB.disabled ? 'not-allowed' : 'pointer';
-                 } else if (myTeam === 'A') { // I am Captain A, viewing Team B
-                     buttonB.innerHTML = '🔄'; // Swap intent
-                     buttonB.className = 'swap-intent-button';
-                     buttonB.onclick = handleSwapIntentClick;
-                     buttonB.disabled = false;
-                     buttonB.style.cursor = 'pointer';
-                     if (data.teamASwapIntent) { // If *my* (A's) intent is set for swapping
-                         buttonB.classList.add('swap-pending');
-                         if (buttonA) buttonA.classList.add('swap-pending'); // Also mark A's button if A requested
-                     }
-                 }
-             }
-              // Set team name (always)
-              teamBHeadingDiv.firstChild.textContent = teamBName + ' '; // Ensure space before button
-         } else {
-             teamBHeadingDiv.firstChild.textContent = teamBName; // No button? Just show name
-         }
-
-     } else { // Local Mode
-          const teamAHeadingSpan = teamAHeadingDiv?.firstChild;
-          const teamBHeadingSpan = teamBHeadingDiv?.firstChild;
-          const currentTeamAName = teamAHeadingSpan?.textContent?.replace(/[🔄✎]/, '').trim() || 'Team A';
-          const currentTeamBName = teamBHeadingSpan?.textContent?.replace(/[🔄✎]/, '').trim() || 'Team B';
-
-          if(teamAHeadingSpan) teamAHeadingSpan.textContent = currentTeamAName + ' ';
-          if(teamBHeadingSpan) teamBHeadingSpan.textContent = currentTeamBName + ' ';
-          if (teamACaptainElement) teamACaptainElement.textContent = '';
-          if (teamBCaptainElement) teamBCaptainElement.textContent = '';
-
-          // Handle local edit buttons
-          const canEdit = !local_draftActive;
-          const buttonA = teamAHeadingDiv.querySelector('button');
-          const buttonB = teamBHeadingDiv.querySelector('button');
-          [buttonA, buttonB].forEach(btn => {
-               if (btn) {
-                   btn.style.display = 'inline-block'; // Ensure visible in local
-                   btn.innerHTML = '✎';
-                   btn.className = 'edit-team-name';
-                   btn.onclick = handleLocalEditTeamName; // Assign local handler
-                   btn.disabled = !canEdit;
-                   btn.style.cursor = canEdit ? 'pointer' : 'not-allowed';
-                   btn.style.opacity = canEdit ? 0.6 : 0.2;
-                   btn.classList.remove('swap-pending');
-               }
-           });
-     }
-}
-
-
-// Modified to accept draftStatus to control emoji visibility
-function updatePlayerStatusUI(players, draftStatus) {
-     const teamACaptainElement = document.getElementById('team-a-captain');
-     const teamBCaptainElement = document.getElementById('team-b-captain');
-     const spectatorListElement = document.getElementById('spectator-list'); // Assuming an element exists with this ID
-     if (!teamACaptainElement || !teamBCaptainElement || !spectatorListElement) {
-        console.warn("Player status UI elements not found.");
-        return;
-     }
-
-     let captainA = null, captainB = null;
-     const spectators = [];
-     for (const uid in players) {
-         const player = players[uid];
-         if (player.role === 'captain') {
-             if (player.team === 'A') captainA = player;
-             if (player.team === 'B') captainB = player;
-         } else if (player.role === 'spectator' && player.isConnected) {
-             spectators.push(player.displayName || `Spectator_${uid.substring(0,4)}`);
-         }
-     }
-
-     // Conditionally show ready indicator based on draft status
-     const showReady = draftStatus === 'waiting' || draftStatus === 'complete';
-     const readyIndicator = (player) => (player && showReady) ? (player.isReady ? '✔️' : '⏳') : '';
-     const connectionIndicator = (player) => player ? (player.isConnected ? '🟢' : '🔴') : '';
-
-     teamACaptainElement.textContent = captainA
-         ? `${captainA.displayName || 'Captain A'} ${connectionIndicator(captainA)}${readyIndicator(captainA)}`
-         : '(...)';
-     teamBCaptainElement.textContent = captainB
-         ? `${captainB.displayName || 'Captain B'} ${connectionIndicator(captainB)}${readyIndicator(captainB)}`
-         : '(...)';
-
-     // Update spectator list display
-     if (spectators.length > 0) {
-         spectatorListElement.textContent = `${spectators.join(', ')}`;
-         spectatorListElement.style.display = 'block'; // Ensure visibility if spectators exist
-         spectatorListElement.closest('details').style.display = 'block'; // Show the details container
-     } else {
-         spectatorListElement.textContent = '';
-         // Don't hide the element itself, just clear content
-         // Hiding the parent 'details' element might be better if desired
-         spectatorListElement.closest('details').style.display = 'none'; // Hide the details container if empty
-     }
-}
-
-
-// --- LOCAL MODE Match History ---
-function createLocalMatchHistoryEntry() {
-     const historyContainer = document.getElementById('match-history');
-     if (!historyContainer || isMultiplayerMode) return; // Only for local mode
-
-     local_gameCounter++;
-     const draftId = `draft${local_gameCounter}`;
-     const label = `Draft ${local_gameCounter}: `;
-
-     // Check if div already exists (shouldn't happen if logic is correct)
-     if (document.getElementById(draftId)) {
-         console.warn("Attempted to create duplicate local history div:", draftId);
-         return;
-     }
-
-     const newDraftDiv = document.createElement('div');
-     newDraftDiv.id = draftId;
-     newDraftDiv.className = 'match-entry'; // Add class for potential styling
-     newDraftDiv.textContent = label;
-     historyContainer.appendChild(newDraftDiv); // Append the new div
-}
-
-function recordAndDisplayLocalMatchHistory(team, phase, character) {
-      if (isMultiplayerMode || !local_draftActive) return;
-
-      let entryText = '';
-      const currentPickNumber = (team === 'A' ? local_teamAPicks.length : local_teamBPicks.length); // Pick number before adding
-
-      if (phase === 'ban') {
-          entryText = `${team} BAN: ${character || 'Skipped'}. `;
-      } else if (phase === 'pick') {
-          // Pick number should be 1-based for display
-          entryText = `${team} PICK ${currentPickNumber}: ${character}. `;
-      } else {
-          return;
-      }
-
-      local_matchHistory.push(entryText); // Add to internal history array (can be removed if not needed)
-
-      const draftId = `draft${local_gameCounter}`;
-      const historyDisplayDiv = document.getElementById(draftId);
-
-      if (historyDisplayDiv) {
-          historyDisplayDiv.textContent += entryText; // Append the new action text
-      } else {
-          console.warn("Could not find local match history display div:", draftId);
-      }
-}
-// --- END LOCAL MODE Match History ---
-
-
-// --- MULTIPLAYER CLIENT-SIDE Match History ---
-function createMultiplayerMatchHistoryEntry() {
-    const historyContainer = document.getElementById('match-history');
-    if (!historyContainer || !isMultiplayerMode) return; // Only for MP mode
-
-    mp_gameCounter++; // Use MP counter
-    const draftId = `mp-draft${mp_gameCounter}`; // Use distinct ID prefix
-    const label = `Draft ${mp_gameCounter}: `;
-
-    // Check if div already exists
-    if (document.getElementById(draftId)) {
-        console.warn("Attempted to create duplicate multiplayer history div:", draftId);
-        return;
-    }
-
-    const newDraftDiv = document.createElement('div');
-    newDraftDiv.id = draftId;
-    newDraftDiv.className = 'match-entry';
-    newDraftDiv.textContent = label;
-    historyContainer.appendChild(newDraftDiv);
-}
-
-function recordAndDisplayMultiplayerMatchHistory(team, phase, character, currentPicksA, currentPicksB) {
-    // Called *after* the state update in Firebase but *before* the UI fully refreshes
-    // It records the action based on the state *before* this action was applied locally.
-    if (!isMultiplayerMode || mp_draftState?.status !== 'in_progress') return;
-
-    let entryText = '';
-    let pickIndex = 0;
-
-    if (phase === 'ban') {
-        entryText = `${team} BAN: ${character || 'Skipped'}. `;
-    } else if (phase === 'pick') {
-        // Calculate pick number based on the arrays *before* the current pick was added
-        pickIndex = (team === 'A' ? currentPicksA.length : currentPicksB.length) + 1;
-        entryText = `${team} PICK ${pickIndex}: ${character || 'Unknown'}. `;
-    } else {
-        return;
-    }
-
-    mp_matchHistory.push(entryText); // Store in client-side array (optional)
-
-    const draftId = `mp-draft${mp_gameCounter}`; // Use MP div ID
-    const historyDisplayDiv = document.getElementById(draftId);
-
-    if (historyDisplayDiv) {
-        historyDisplayDiv.textContent += entryText; // Append the new action text
-    } else {
-        console.warn("Could not find multiplayer match history display div:", draftId);
-        // Optionally, try creating it if it's missing unexpectedly
-        // createMultiplayerMatchHistoryEntry();
-        // const newHistoryDisplayDiv = document.getElementById(draftId);
-        // if (newHistoryDisplayDiv) newHistoryDisplayDiv.textContent += entryText;
-    }
-}
-// --- END MULTIPLAYER CLIENT-SIDE Match History ---
-
-
-function resetUIToLocal() {
-    // Hide MP specific elements
-    const leaveBtn = document.getElementById('leave-room-button');
-    if (leaveBtn) leaveBtn.classList.add('hidden');
-    const readyBtn = document.getElementById('ready-button');
-    if (readyBtn) readyBtn.classList.add('hidden');
-    const joinContainer = document.getElementById('join-room-input-container');
-    if (joinContainer) joinContainer.classList.add('hidden');
-    const capA = document.getElementById('team-a-captain');
-    if (capA) capA.textContent = '';
-    const capB = document.getElementById('team-b-captain');
-    if (capB) capB.textContent = '';
-    const specListContainer = document.getElementById('spectator-list-container'); // Target the container
-    if (specListContainer) specListContainer.style.display = 'none'; // Hide spectator section
-    const reconnectBtn = document.getElementById('reconnect-button');
-    if (reconnectBtn) reconnectBtn.classList.add('hidden');
-    const cancelSessionBtn = document.getElementById('cancel-session-button');
-    if (cancelSessionBtn) cancelSessionBtn.classList.add('hidden');
-
-    // Reset general UI elements
-    const statusMsg = document.getElementById('status-message');
-    if (statusMsg) statusMsg.textContent = 'Configure and start draft';
-    const picksA = document.getElementById('team-a-picks');
-    if (picksA) picksA.innerHTML = '';
-    const picksB = document.getElementById('team-b-picks');
-    if (picksB) picksB.innerHTML = '';
-    const history = document.getElementById('match-history');
-    if (history) history.innerHTML = ''; // Clear history display
-    const skipBtn = document.getElementById('skip-ban');
-    if (skipBtn) skipBtn.style.setProperty('display', 'none');
-    const configPanel = document.getElementById('config');
-    if (configPanel) configPanel.classList.add('hidden');
-    const startBtn = document.getElementById('start-draft');
-    if (startBtn) startBtn.style.display = 'inline-block';
-    const timerDisplay = document.getElementById('timer-display');
-    if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer
-    const configButton = document.getElementById('config-button'); // Show config button
-    if(configButton) configButton.style.display = 'inline-block';
-
-
-    // Update visuals and names for local mode
-    updateCharacterPoolVisuals();
-    updateTeamNamesUI(); // This will reset buttons to local '✎' mode
-}
-
-function resetUIForMultiplayer() {
-     updateCharacterPoolVisuals(); // Update visuals based on MP state
-
-     const picksA = document.getElementById('team-a-picks');
-     if (picksA) picksA.innerHTML = '';
-     const picksB = document.getElementById('team-b-picks');
-     if (picksB) picksB.innerHTML = '';
-
-     const statusMsg = document.getElementById('status-message');
-     if (statusMsg) statusMsg.textContent = 'Joining room...';
-
-     const history = document.getElementById('match-history');
-     if (history) history.innerHTML = ''; // Clear history display
-
-     const capA = document.getElementById('team-a-captain');
-     if (capA) capA.textContent = '(...)';
-     const capB = document.getElementById('team-b-captain');
-     if (capB) capB.textContent = '(...)';
-     const specListContainer = document.getElementById('spectator-list-container'); // Target the container
-     if (specListContainer) specListContainer.style.display = 'block'; // Show spectator section in MP
-     const timerDisplay = document.getElementById('timer-display');
-     if(timerDisplay) timerDisplay.style.display = 'none'; // Hide timer initially
-
-
-     const configPanel = document.getElementById('config');
-     if (configPanel) configPanel.classList.add('hidden');
-     const skipBtn = document.getElementById('skip-ban');
-     if (skipBtn) skipBtn.style.display = 'none';
-     const configButton = document.getElementById('config-button'); // Show config button initially
-     if(configButton) configButton.style.display = 'inline-block';
-     const readyButton = document.getElementById('ready-button'); // Show ready button initially
-     if(readyButton) readyButton.classList.remove('hidden');
-
-
-     //const readyBtn = document.getElementById('ready-button');
-     //if (readyBtn) readyBtn.classList.add('hidden'); // Visibility handled by renderMultiplayerUI
-
-     const reconnectBtn = document.getElementById('reconnect-button');
-     if (reconnectBtn) reconnectBtn.classList.add('hidden');
-     const cancelSessionBtn = document.getElementById('cancel-session-button');
-     if (cancelSessionBtn) cancelSessionBtn.classList.add('hidden');
-
-     updateTeamNamesUI(); // Update names/status/buttons for MP
-}
-
-// Renamed for clarity
-function updateConfigInputsState(disabled, syncFromFirebase = false) {
-    const exclusivityCheck = document.getElementById('hunter-exclusivity');
-    const banSelect = document.getElementById('ban-count');
-    const timerEnabledCheck = document.getElementById('timer-enabled');
-    const timerDurationInput = document.getElementById('timer-duration');
-    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
-
-    const elements = [exclusivityCheck, banSelect, timerEnabledCheck, timerDurationInput, draftOrderSelect]; // NEW: Added draftOrderSelect
-
-    if (syncFromFirebase && isMultiplayerMode && mp_draftState?.settings) {
-        // Update UI elements to match Firebase state before changing disabled status
-        const settings = mp_draftState.settings;
-        if (exclusivityCheck) exclusivityCheck.checked = settings.hunterExclusivity ?? true;
-        if (banSelect) banSelect.value = settings.maxTotalBans?.toString() ?? "2";
-        if (timerEnabledCheck) timerEnabledCheck.checked = settings.timerEnabled ?? false;
-        if (timerDurationInput) timerDurationInput.value = settings.timerDuration ?? DEFAULT_TIMER_DURATION;
-        if (draftOrderSelect) draftOrderSelect.value = settings.draftOrderType || 'Snake'; // NEW
-    }
-
-    elements.forEach(el => {
-        if (el) {
-            el.disabled = disabled;
+    },
+
+    updateTeamNamesAndActionsUI() {
+        const { teamAHeading, teamBHeading } = DOMElements; if (!teamAHeading || !teamBHeading) return;
+        const setupButton = (button, isMyTeam, isMyCaptainRole, canPerformAction, isEditButton, otherTeamSwapIntent, myTeamSwapIntent) => {
+            if (!button) return;
+            button.className = ''; button.innerHTML = ''; button.onclick = null;
+            UIUpdater.hide(button); UIUpdater.disable(button); button.style.cursor = 'default'; UIUpdater.toggleClass(button, 'swap-pending', false);
+            if (canPerformAction && isMyCaptainRole) {
+                UIUpdater.show(button); UIUpdater.enable(button, true); button.style.cursor = 'pointer';
+                if (isEditButton && isMyTeam) {
+                    button.innerHTML = '✎'; button.className = 'edit-team-name'; button.onclick = FirebaseOps.handleMultiplayerEditTeamName;
+                } else if (!isEditButton && !isMyTeam) { // This is a swap button for the other team
+                    button.innerHTML = '🔄'; button.className = 'swap-intent-button'; button.onclick = handleSwapIntentClick;
+                    UIUpdater.toggleClass(button, 'swap-pending', !!myTeamSwapIntent);
+                } else { UIUpdater.hide(button); }
+            }
+        };
+        if (appState.isMultiplayerMode && appState.multiplayer.draftState?.players) {
+            const data = appState.multiplayer.draftState; const teamAName = data.teamAName || 'Team A'; const teamBName = data.teamBName || 'Team B';
+            const draftStatus = data.status || 'setup'; const canAction = (draftStatus === 'waiting' || draftStatus === 'complete');
+            UIUpdater.updatePlayerStatusInTeamHeaders(data.players, draftStatus);
+            const myPlayerData = data.players[appState.currentUserId]; const myTeam = myPlayerData?.team; const isMyCaptainRole = myPlayerData?.role === 'captain';
+            
+            const buttonA = teamAHeading.querySelector('button'); 
+            if(teamAHeading.firstChild) teamAHeading.firstChild.textContent = teamAName + ' ';
+            if (isMyCaptainRole && myTeam === 'A') setupButton(buttonA, true, true, canAction, true, data.teamBSwapIntent, data.teamASwapIntent); // Edit own
+            else if (isMyCaptainRole && myTeam === 'B') setupButton(buttonA, false, true, canAction, false, data.teamASwapIntent, data.teamBSwapIntent); // Swap other
+            else UIUpdater.hide(buttonA);
+
+            const buttonB = teamBHeading.querySelector('button');
+            if(teamBHeading.firstChild) teamBHeading.firstChild.textContent = teamBName + ' ';
+            if (isMyCaptainRole && myTeam === 'B') setupButton(buttonB, true, true, canAction, true, data.teamASwapIntent, data.teamBSwapIntent); // Edit own
+            else if (isMyCaptainRole && myTeam === 'A') setupButton(buttonB, false, true, canAction, false, data.teamBSwapIntent, data.teamASwapIntent); // Swap other
+            else UIUpdater.hide(buttonB);
+
+        } else { 
+            const teamAHeadingSpan = teamAHeading.firstChild; const teamBHeadingSpan = teamBHeading.firstChild;
+            const currentTeamAName = teamAHeadingSpan?.textContent?.replace(/[🔄✎]/, '').trim() || 'Team A';
+            const currentTeamBName = teamBHeadingSpan?.textContent?.replace(/[🔄✎]/, '').trim() || 'Team B';
+            if (teamAHeadingSpan) teamAHeadingSpan.textContent = currentTeamAName + ' '; if (teamBHeadingSpan) teamBHeadingSpan.textContent = currentTeamBName + ' ';
+            UIUpdater.setText(DOMElements.teamACaptain, ''); UIUpdater.setText(DOMElements.teamBCaptain, '');
+            const canEdit = !appState.local.draftActive;
+            [teamAHeading.querySelector('button'), teamBHeading.querySelector('button')].forEach(btn => {
+                if (btn) {
+                    UIUpdater.show(btn); btn.innerHTML = '✎'; btn.className = 'edit-team-name'; btn.onclick = handleLocalEditTeamName;
+                    UIUpdater.enable(btn, canEdit); btn.style.cursor = canEdit ? 'pointer' : 'not-allowed';
+                    btn.style.opacity = canEdit ? 0.6 : 0.2; UIUpdater.toggleClass(btn, 'swap-pending', false);
+                }
+            });
         }
-    });
-}
+    },
+    
+    updatePlayerStatusInTeamHeaders(players = {}, draftStatus) {
+        let captainA = null, captainB = null; const spectators = [];
+        for (const uid in players) { const player = players[uid]; if (player.role === 'captain') { if (player.team === 'A') captainA = player; if (player.team === 'B') captainB = player; } else if (player.role === 'spectator' && player.isConnected) { spectators.push(player.displayName || `Spectator_${uid.substring(0,4)}`); }}
+        const showReady = draftStatus === 'waiting' || draftStatus === 'complete';
+        const readyIndicator = (player) => (player && showReady) ? (player.isReady ? '✔️' : '⏳') : '';
+        const connectionIndicator = (player) => player ? (player.isConnected ? '🟢' : '🔴') : '';
+        UIUpdater.setText(DOMElements.teamACaptain, captainA ? `${captainA.displayName || 'Captain A'} ${connectionIndicator(captainA)}${readyIndicator(captainA)}` : '(...)');
+        UIUpdater.setText(DOMElements.teamBCaptain, captainB ? `${captainB.displayName || 'Captain B'} ${connectionIndicator(captainB)}${readyIndicator(captainB)}` : '(...)');
+        if (spectators.length > 0) { UIUpdater.setText(DOMElements.spectatorListDisplay, spectators.join(', ')); UIUpdater.show(DOMElements.spectatorListDisplay, 'block'); UIUpdater.show(DOMElements.spectatorListContainer, 'flex'); }
+        else { UIUpdater.setText(DOMElements.spectatorListDisplay, ''); UIUpdater.hide(DOMElements.spectatorListContainer); }
+    },
 
+    updateConfigInputsState(disabled, firebaseSettings = null) { 
+        const { hunterExclusivityCheckbox, banCountSelect, timerEnabledCheckbox, timerDurationInput, draftOrderTypeSelect } = DOMElements;
+        const elementsToUpdate = [hunterExclusivityCheckbox, banCountSelect, timerEnabledCheckbox, timerDurationInput, draftOrderTypeSelect];
 
-function enableLocalDraftControls() {
-    const configBtn = document.getElementById('config-button');
-    if (configBtn) configBtn.disabled = false; // Enable config button
+        if (firebaseSettings) { 
+            if (hunterExclusivityCheckbox) hunterExclusivityCheckbox.checked = firebaseSettings.hunterExclusivity ?? true;
+            if (banCountSelect) banCountSelect.value = firebaseSettings.maxTotalBans?.toString() ?? "2"; 
+            if (timerEnabledCheckbox) timerEnabledCheckbox.checked = firebaseSettings.timerEnabled ?? false;
+            if (timerDurationInput) timerDurationInput.value = firebaseSettings.timerDuration ?? DEFAULT_TIMER_DURATION_SECONDS;
+            if (draftOrderTypeSelect) draftOrderTypeSelect.value = firebaseSettings.draftOrderType || 'Snake';
+        }
+        elementsToUpdate.forEach(el => { if (el) el.disabled = disabled; });
+    },
+    
+    resetUIForLocalMode() {
+        UIUpdater.hide(DOMElements.leaveRoomButton); UIUpdater.hide(DOMElements.readyButton); UIUpdater.hide(DOMElements.joinRoomInputContainer);
+        UIUpdater.setText(DOMElements.teamACaptain, ''); UIUpdater.setText(DOMElements.teamBCaptain, '');
+        UIUpdater.hide(DOMElements.spectatorListContainer); UIUpdater.hide(DOMElements.reconnectButton); UIUpdater.hide(DOMElements.cancelSessionButton);
+        UIUpdater.hide(DOMElements.gameCounterDisplay);
+        UIUpdater.updateStatusMessageText(); UIUpdater.updateTeamPicksDisplay([], []); UIUpdater.setHtml(DOMElements.matchHistoryDisplay, '');
+        UIUpdater.hide(DOMElements.skipBanButton); UIUpdater.hide(DOMElements.configPanel); UIUpdater.show(DOMElements.startDraftButton);
+        UIUpdater.hide(DOMElements.timerDisplay); UIUpdater.show(DOMElements.configButton); UIUpdater.enable(DOMElements.configButton, true);
+        UIUpdater.updateCharacterPoolVisuals(); UIUpdater.updateTeamNamesAndActionsUI();
+    },
 
-    updateConfigInputsState(false); // Enable config inputs
+    resetUIForMultiplayerMode() {
+        UIUpdater.updateCharacterPoolVisuals(); UIUpdater.updateTeamPicksDisplay([], []); UIUpdater.setText(DOMElements.statusMessage, 'Joining room...');
+        UIUpdater.setHtml(DOMElements.matchHistoryDisplay, ''); UIUpdater.setText(DOMElements.teamACaptain, '(...)'); UIUpdater.setText(DOMElements.teamBCaptain, '(...)');
+        UIUpdater.show(DOMElements.spectatorListContainer, 'flex'); UIUpdater.hide(DOMElements.timerDisplay); UIUpdater.hide(DOMElements.configPanel);
+        UIUpdater.hide(DOMElements.skipBanButton); UIUpdater.show(DOMElements.configButton); UIUpdater.show(DOMElements.readyButton);
+        UIUpdater.hide(DOMElements.reconnectButton); UIUpdater.hide(DOMElements.cancelSessionButton); UIUpdater.hide(DOMElements.startDraftButton);
+        UIUpdater.show(DOMElements.gameCounterDisplay);
+        UIUpdater.updateTeamNamesAndActionsUI();
+    },
 
-    const startButton = document.getElementById('start-draft');
-    if (startButton) {
-        startButton.disabled = local_draftActive;
-        startButton.textContent = "Start Draft";
-        startButton.style.display = 'inline-block';
-    }
-    const readyButton = document.getElementById('ready-button');
-    if (readyButton) readyButton.classList.add('hidden');
-}
+    updateMultiplayerButtonVisibility() {
+        const { createRoomButton, joinRoomButton, leaveRoomButton, readyButton, joinRoomInputContainer, reconnectButton, cancelSessionButton, configButton, startDraftButton } = DOMElements;
+        [createRoomButton, joinRoomButton, leaveRoomButton, readyButton, joinRoomInputContainer, reconnectButton, cancelSessionButton, startDraftButton].forEach(UIUpdater.hide);
+        [createRoomButton, joinRoomButton, reconnectButton, cancelSessionButton, configButton, startDraftButton, readyButton, leaveRoomButton].forEach(btn => UIUpdater.disable(btn, true));
+        if (appState.isMultiplayerMode) {
+            UIUpdater.show(leaveRoomButton); UIUpdater.enable(leaveRoomButton, true);
+            UIUpdater.show(configButton); UIUpdater.show(readyButton); UIUpdater.show(startDraftButton); // Actual enabled state by renderMultiplayerMainUI
+        } else { 
+            UIUpdater.show(configButton); UIUpdater.enable(configButton, !appState.local.draftActive);
+            UIUpdater.show(startDraftButton); UIUpdater.enable(startDraftButton, !appState.local.draftActive);
+            if (fbAuthError) {
+                UIUpdater.show(createRoomButton); UIUpdater.setText(createRoomButton, "Create (Error)"); UIUpdater.disable(createRoomButton, true);
+                UIUpdater.show(joinRoomButton); UIUpdater.setText(joinRoomButton, "Join (Error)"); UIUpdater.disable(joinRoomButton, true);
+            } else if (!fbAuth || !appState.currentUserId) { 
+                UIUpdater.show(createRoomButton); UIUpdater.disable(createRoomButton, true); UIUpdater.show(joinRoomButton); UIUpdater.disable(joinRoomButton, true);
+            } else { 
+                const storedDraftId = sessionStorage.getItem('currentDraftId');
+                if (storedDraftId) { UIUpdater.show(reconnectButton); UIUpdater.enable(reconnectButton, true); UIUpdater.show(cancelSessionButton); UIUpdater.enable(cancelSessionButton, true); }
+                else { UIUpdater.show(createRoomButton); UIUpdater.enable(createRoomButton, true); UIUpdater.setText(createRoomButton, "Create Room"); UIUpdater.show(joinRoomButton); UIUpdater.enable(joinRoomButton, true); UIUpdater.setText(joinRoomButton, "Join Room"); }
+            }
+        }
+        UIUpdater.updateStatusMessageText();
+    },
 
-function disableLocalDraftControls() {
-      const configBtn = document.getElementById('config-button');
-      if (configBtn) configBtn.disabled = true; // Disable config button
+    renderMultiplayerMainUI(data) { 
+        if (!appState.isMultiplayerMode || !data || Object.keys(data).length === 0) {
+            UIUpdater.hide(DOMElements.startDraftButton); UIUpdater.hide(DOMElements.skipBanButton); UIUpdater.hide(DOMElements.readyButton);
+            return;
+        }
+        UIUpdater.updateTeamNamesAndActionsUI(); 
+        UIUpdater.updateStatusMessageText();
+        UIUpdater.updateTeamPicksDisplay(data.teamAPicks, data.teamBPicks);
+        UIUpdater.updateCharacterPoolVisuals();
+        UIUpdater.setText(DOMElements.gameCounterDisplay, `Game #${data.currentGameNumber || 1}`);
+        UIUpdater.show(DOMElements.gameCounterDisplay);
 
-      updateConfigInputsState(true); // Disable config inputs
-
-      const startBtn = document.getElementById('start-draft');
-      // Visibility/state handled by renderMultiplayerUI in MP mode
-      if (startBtn && !isMultiplayerMode) {
-          startBtn.disabled = true; // Disable start button
-          startBtn.style.display = 'none';
-      } else if (startBtn && isMultiplayerMode) {
-          // Don't hide/disable here, let renderMultiplayerUI control it
-      }
-
-      const configPanel = document.getElementById('config');
-      if (configPanel) configPanel.classList.add('hidden'); // Hide config panel
-      const skipBtn = document.getElementById('skip-ban');
-      if (skipBtn) skipBtn.style.display = 'none'; // Hide skip ban
-}
-
-function disableMultiplayerJoinCreateButtons() {
-     const createBtn = document.getElementById('create-room-button');
-     const joinBtn = document.getElementById('join-room-button');
-     const joinContainer = document.getElementById('join-room-input-container');
-     const reconnectBtn = document.getElementById('reconnect-button');
-     const cancelSessionBtn = document.getElementById('cancel-session-button');
-
-     if(createBtn) {
-         createBtn.disabled = true;
-         createBtn.classList.add('hidden');
-     }
-      if(joinBtn) {
-         joinBtn.disabled = true;
-         joinBtn.classList.add('hidden');
-     }
-     if(joinContainer) joinContainer.classList.add('hidden');
-     if(reconnectBtn) reconnectBtn.classList.add('hidden');
-     if(cancelSessionBtn) cancelSessionBtn.classList.add('hidden');
-}
-
-function updateMultiplayerButtonStates() {
-    const createBtn = document.getElementById('create-room-button');
-    const joinBtn = document.getElementById('join-room-button');
-    const leaveBtn = document.getElementById('leave-room-button');
-    const readyBtn = document.getElementById('ready-button');
-    const joinInputContainer = document.getElementById('join-room-input-container');
-    const reconnectBtn = document.getElementById('reconnect-button');
-    const cancelSessionBtn = document.getElementById('cancel-session-button');
-    const configBtn = document.getElementById('config-button'); // Get config button
-
-    if (!createBtn || !joinBtn || !leaveBtn || !joinInputContainer || !readyBtn || !reconnectBtn || !cancelSessionBtn || !configBtn) {
-        console.warn("One or more MP control buttons not found.");
-        return;
-    }
-
-    // --- Default state: Hide/disable most things ---
-    createBtn.classList.add('hidden'); createBtn.disabled = true;
-    joinBtn.classList.add('hidden'); joinBtn.disabled = true;
-    leaveBtn.classList.add('hidden');
-    readyBtn.classList.add('hidden'); // Visibility controlled by renderMultiplayerUI
-    joinInputContainer.classList.add('hidden');
-    reconnectBtn.classList.add('hidden'); reconnectBtn.disabled = true;
-    cancelSessionBtn.classList.add('hidden'); cancelSessionBtn.disabled = true;
-    configBtn.classList.add('hidden'); configBtn.disabled = true; // Hide/disable config button by default
-
-    // --- Scenario 1: Actively IN a multiplayer room ---
-    if (isMultiplayerMode) {
-        leaveBtn.classList.remove('hidden'); // Show Leave
-        // Config and Ready button visibility/state are handled by renderMultiplayerUI
-        configBtn.classList.remove('hidden'); // Make config button potentially visible
-        readyBtn.classList.remove('hidden'); // Make ready button potentially visible
-        return; // Exit, let renderMultiplayerUI handle the rest
-    }
-
-    // --- Scenario 2: NOT in Multiplayer Mode ---
-    configBtn.classList.remove('hidden'); // Config button is visible in local mode
-    configBtn.disabled = local_draftActive; // Disabled if local draft active
-
-    // Leave and Ready buttons are always hidden when not in MP mode.
-    if (authError) {
-        // Show nothing interactable if auth failed
-        createBtn.classList.remove('hidden'); createBtn.disabled = true; createBtn.textContent = "Create (Error)";
-        joinBtn.classList.remove('hidden'); joinBtn.disabled = true; joinBtn.textContent = "Join (Error)";
-    } else if (!auth || !mp_currentUserId) {
-        // Show disabled state while connecting/authenticating
-        createBtn.classList.remove('hidden'); createBtn.disabled = true;
-        joinBtn.classList.remove('hidden'); joinBtn.disabled = true;
-    } else if (mp_currentUserId) {
-        // --- User is Authenticated, NOT in a room ---
-        const storedDraftId = sessionStorage.getItem('currentDraftId');
-
-        if (storedDraftId) {
-            // *** Previous session detected ***
-            console.log("MP Buttons: Previous session detected, showing Reconnect/Cancel.");
-            reconnectBtn.classList.remove('hidden');
-            reconnectBtn.disabled = false;
-
-            cancelSessionBtn.classList.remove('hidden');
-            cancelSessionBtn.disabled = false;
-            // Hide standard Create/Join
-            createBtn.classList.add('hidden');
-            joinBtn.classList.add('hidden');
-            joinInputContainer.classList.add('hidden'); // Ensure input is hidden
+        if (data.matchHistory) {
+             DOMElements.matchHistoryDisplay.innerHTML = ''; 
+             const gameNumbers = Object.keys(data.matchHistory).map(Number).sort((a, b) => a - b);
+             gameNumbers.forEach(gameNum => {
+                 const historyArray = data.matchHistory[gameNum] ? Object.values(data.matchHistory[gameNum]) : [];
+                 HistoryRender.renderMultiplayerHistory(historyArray, gameNum);
+             });
         } else {
-            // *** No previous session, show standard Create/Join ***
-            console.log("MP Buttons: Authenticated, no session, showing Create/Join.");
-            createBtn.classList.remove('hidden');
-            createBtn.disabled = false;
-
-            joinBtn.classList.remove('hidden');
-            joinBtn.disabled = false;
-            // Hide Reconnect/Cancel
-            reconnectBtn.classList.add('hidden');
-            cancelSessionBtn.classList.add('hidden');
-            // Note: The join input container visibility is handled by the join button's click listener
+             DOMElements.matchHistoryDisplay.innerHTML = ''; // Clear if no history yet
         }
-    } else {
-        // Fallback: Should not be reachable if logic above is correct
-        console.log("MP Buttons: Fallback state, keeping controls hidden.");
-        createBtn.classList.add('hidden'); createBtn.disabled = true;
-        joinBtn.classList.add('hidden'); joinBtn.disabled = true;
+
+
+        const { startDraftButton, skipBanButton, readyButton, configButton, configPanel } = DOMElements;
+        const draftStatus = data.status || 'setup';
+        const playerRole = appState.multiplayer.playerRole;
+        const iAmCaptainA = playerRole === 'captainA'; const iAmCaptainB = playerRole === 'captainB';
+        const isSpectator = playerRole === 'spectator'; const isMyCaptainRole = iAmCaptainA || iAmCaptainB;
+        let playerA = null, playerB = null;
+        let myPlayerData = data.players?.[appState.currentUserId];
+        let iAmReady = isMyCaptainRole && myPlayerData?.isReady === true;
+        if (data.players) { for (const uid in data.players) { const p = data.players[uid]; if (p.role === 'captain') { if (p.team === 'A') playerA = p; if (p.team === 'B') playerB = p; }}}
+        const bothConnected = playerA?.isConnected && playerB?.isConnected;
+        const bothReady = playerA?.isReady && playerB?.isReady;
+        const isDraftActive = draftStatus === 'in_progress';
+
+        const canConfigure = !isDraftActive && iAmCaptainA && (draftStatus === 'waiting' || draftStatus === 'complete');
+        canConfigure ? UIUpdater.show(configButton) : UIUpdater.hide(configButton);
+        UIUpdater.enable(configButton, canConfigure);
+        if (!canConfigure && !configPanel.classList.contains('hidden')) { // If config panel is open but conditions no longer met
+            UIUpdater.hide(configPanel);
+        }
+        // Disable inputs if panel is hidden OR if cannot configure. Sync if panel is open & can configure.
+        const disableConfigInputs = configPanel.classList.contains('hidden') || !canConfigure;
+        UIUpdater.updateConfigInputsState(disableConfigInputs, data.settings);
+
+
+        const showReadyButton = !isDraftActive && isMyCaptainRole && (draftStatus === 'waiting' || draftStatus === 'complete');
+        showReadyButton ? UIUpdater.show(readyButton) : UIUpdater.hide(readyButton);
+        if (showReadyButton) { UIUpdater.enable(readyButton, true); UIUpdater.setText(readyButton, iAmReady ? "Unready" : "Ready Up");}
+
+        const showStartButton = (draftStatus === 'waiting' || draftStatus === 'complete') && iAmCaptainA;
+        showStartButton ? UIUpdater.show(startDraftButton) : UIUpdater.hide(startDraftButton);
+        if (showStartButton) { UIUpdater.enable(startDraftButton, bothConnected && bothReady); UIUpdater.setText(startDraftButton, "Start Draft");}
+        
+        const myTurnForAction = isDraftActive && ((data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB));
+        const showSkip = isDraftActive && data.currentPhase === 'ban' && myTurnForAction && !isSpectator;
+        showSkip ? UIUpdater.show(skipBanButton) : UIUpdater.hide(skipBanButton);
+        UIUpdater.enable(skipBanButton, showSkip);
     }
-    // Update status message separately
-    updateStatusMessage();
+};
+
+const Timer = { 
+    start(durationSeconds) { Timer.stop(); const modeState = appState.isMultiplayerMode ? appState.multiplayer : appState.local; modeState.timerEndTime = Date.now() + durationSeconds * 1000; modeState.timerIntervalId = setInterval(UIUpdater.updateTimerDisplay, 1000); UIUpdater.updateTimerDisplay(); },
+    stop() { const local = appState.local; const mp = appState.multiplayer; if (local.timerIntervalId) { clearInterval(local.timerIntervalId); local.timerIntervalId = null; local.timerEndTime = null; } if (mp.timerIntervalId) { clearInterval(mp.timerIntervalId); mp.timerIntervalId = null; mp.timerEndTime = null; } UIUpdater.updateTimerDisplay(); },
+    startMultiplayerTimerFromFirebaseState(stateData) { Timer.stop(); const timerEnabled = stateData?.settings?.timerEnabled ?? false; const timerDuration = stateData?.settings?.timerDuration ?? DEFAULT_TIMER_DURATION_SECONDS; const actionStartTime = stateData?.currentActionStartTime; if (timerEnabled && actionStartTime && stateData.status === 'in_progress') { const expectedEndTime = actionStartTime + (timerDuration * 1000); const now = Date.now(); const remainingMilliseconds = expectedEndTime - now; if (remainingMilliseconds > -60000) { appState.multiplayer.timerEndTime = expectedEndTime; appState.multiplayer.timerIntervalId = setInterval(UIUpdater.updateTimerDisplay, 1000); UIUpdater.updateTimerDisplay(); } else { appState.multiplayer.timerEndTime = expectedEndTime; UIUpdater.updateTimerDisplay(); } } else { UIUpdater.updateTimerDisplay(); } }
+};
+
+const DraftLogic = { 
+    isCharValidSelection(charName, phase, currentTeam, teamAPicks = [], teamBPicks = [], bannedChars = [], hunterExclusivity) { if (bannedChars.some(b => b === charName)) return false; if (phase === 'ban') { return !teamAPicks.includes(charName) && !teamBPicks.includes(charName); } else if (phase === 'pick') { if (hunterExclusivity) { if ((currentTeam === 'A' && teamBPicks.includes(charName)) || (currentTeam === 'B' && teamAPicks.includes(charName))) { return false; } } const myPicks = currentTeam === 'A' ? teamAPicks : teamBPicks; return !myPicks.includes(charName); } return false; },
+    determineNextTurn(currentPhase, currentTeam, bansMade, totalExpectedBans, picksMade, draftOrderType) { let nextTeam = currentTeam; let nextPhase = currentPhase; if (currentPhase === 'ban') { if (bansMade >= totalExpectedBans) { nextPhase = 'pick'; nextTeam = 'A'; } else { nextTeam = currentTeam === 'A' ? 'B' : 'A'; } } else if (currentPhase === 'pick') { if (picksMade >= TOTAL_PICKS_NEEDED) { return { phase: null, team: null, draftOver: true }; } if (draftOrderType === 'Alt') { if (picksMade === 1) nextTeam = 'B'; else if (picksMade === 2) nextTeam = 'B'; else if (picksMade === 3) nextTeam = 'A'; else if (picksMade === 4) nextTeam = 'B'; else if (picksMade === 5) nextTeam = 'A'; else if (picksMade === 6) nextTeam = 'A'; else if (picksMade === 7) nextTeam = 'B'; } else { const pickIndexJustMade = picksMade - 1; if (pickIndexJustMade === 0 || pickIndexJustMade === 1 || pickIndexJustMade === 4 || pickIndexJustMade === 5) { nextTeam = 'B'; } else { nextTeam = 'A'; } } } return { phase: nextPhase, team: nextTeam, draftOver: false }; }
+};
+
+const HistoryRender = {
+    ensureGameHistoryContainer(gameNumber, isMultiplayer) {
+        const historyDisplay = DOMElements.matchHistoryDisplay;
+        if (!historyDisplay) return null;
+        const draftDivId = `${isMultiplayer ? 'mp-' : ''}draft${gameNumber}`;
+        let draftDiv = document.getElementById(draftDivId);
+        if (!draftDiv) {
+            draftDiv = document.createElement('div');
+            draftDiv.id = draftDivId;
+            draftDiv.className = 'match-entry';
+            // Only clear for local mode, MP appends or replaces in renderMultiplayerMainUI
+            if (!isMultiplayer) historyDisplay.innerHTML = ''; 
+            historyDisplay.appendChild(draftDiv);
+        }
+        draftDiv.textContent = `Draft ${gameNumber}: `; // Set/reset the label
+        return draftDiv;
+    },
+
+    recordAndDisplayLocalAction(team, phase, character, picksBeforeActionA = [], picksBeforeActionB = []) {
+        const local = appState.local; if (!local.draftActive) return;
+        let entryText = '';
+        if (phase === 'ban') entryText = `${team}0 ${character || 'Null'}. `;
+        else if (phase === 'pick') { const pickNumber = (team === 'A' ? picksBeforeActionA.length : picksBeforeActionB.length) + 1; entryText = `${team}${pickNumber} ${character}. `; }
+        else return;
+        local.matchHistory.push(entryText); 
+        const draftDiv = HistoryRender.ensureGameHistoryContainer(local.gameCounter, false);
+        if (draftDiv) { const actionSpan = document.createElement('span'); actionSpan.textContent = entryText; draftDiv.appendChild(actionSpan); }
+    },
+
+    renderMultiplayerHistory(historyList = [], gameNumber) { // Expect historyList to be an array of strings
+        const draftDiv = HistoryRender.ensureGameHistoryContainer(gameNumber, true);
+        if (!draftDiv) return;
+        
+        // History list is already ordered by push time in Firebase (when using push)
+        // If using object keys, they need sorting first. Assuming array/list from push.
+        let fullHistoryText = `Draft ${gameNumber}: ${historyList.join('')}`; // Join the array of strings
+        draftDiv.textContent = fullHistoryText; 
+    }
+};
+
+function resetLocalDraftState() {
+    const local = appState.local; local.currentPhase = 'setup'; local.currentTeam = 'A';
+    local.teamAPicks = []; local.teamBPicks = []; local.bannedCharacters = []; local.matchHistory = [];
+    local.draftActive = false; Timer.stop();
 }
 
-
-function updateUIAfterJoinCreate(draftId) {
-     console.log("Joined/Created room:", draftId);
-
-     const leaveButton = document.getElementById('leave-room-button');
-     if (leaveButton) leaveButton.classList.remove('hidden');
-
-     updateMultiplayerButtonStates(); // Hide create/join/reconnect/cancel, show Leave/Config/Ready
-     updateTeamNamesUI(); // Update names based on initial state
-     // Clear history display area for the new room
-     const historyDisplay = document.getElementById('match-history');
-     if (historyDisplay) historyDisplay.innerHTML = '';
+function resetMultiplayerSessionState() {
+    const mp = appState.multiplayer; mp.currentDraftId = null;
+    if (appState.mpDraftSubscription) { try { appState.mpDraftSubscription(); } catch (e) { console.warn("Error unsubscribing from Firebase draft:", e); }}
+    appState.mpDraftSubscription = null; mp.playerRole = null; mp.draftState = {}; Timer.stop();
+    sessionStorage.removeItem('currentDraftId'); sessionStorage.removeItem('playerRole');
 }
 
-// ========================================================================= //
-// ======================= LOCAL MODE LOGIC ================================ //
-// ========================================================================= //
+function updateApplicationMode(newIsMultiplayerMode) {
+    const previousIsMultiplayerMode = appState.isMultiplayerMode; appState.isMultiplayerMode = newIsMultiplayerMode; Timer.stop();
+    if (previousIsMultiplayerMode && !newIsMultiplayerMode) { resetMultiplayerSessionState(); resetLocalDraftState(); UIUpdater.resetUIForLocalMode(); UIUpdater.updateConfigInputsState(false); }
+    else if (!previousIsMultiplayerMode && newIsMultiplayerMode) { resetLocalDraftState(); UIUpdater.resetUIForMultiplayerMode(); }
+    else { if (!newIsMultiplayerMode) { UIUpdater.resetUIForLocalMode(); UIUpdater.updateConfigInputsState(appState.local.draftActive); } else { UIUpdater.resetUIForMultiplayerMode(); }}
+    UIUpdater.updateMultiplayerButtonVisibility(); UIUpdater.updateCharacterPoolVisuals();
+    UIUpdater.setHtml(DOMElements.matchHistoryDisplay, ''); UIUpdater.show(DOMElements.matchHistoryContainer);
+    UIUpdater.hide(DOMElements.gameCounterDisplay);
+}
 
 function handleLocalStartDraft() {
-    if (local_draftActive || isMultiplayerMode) return;
+    if (appState.local.draftActive || appState.isMultiplayerMode) return;
+    const local = appState.local;
+    local.hunterExclusivity = DOMElements.hunterExclusivityCheckbox.checked;
+    local.maxBansPerTeam = parseInt(DOMElements.banCountSelect.value) / 2;
+    local.timerEnabled = DOMElements.timerEnabledCheckbox.checked;
+    local.timerDuration = parseInt(DOMElements.timerDurationInput.value) || DEFAULT_TIMER_DURATION_SECONDS;
+    if (local.timerDuration <= 0) local.timerDuration = DEFAULT_TIMER_DURATION_SECONDS;
+    local.draftOrderType = DOMElements.draftOrderTypeSelect.value;
 
-    // Read config values
-    const exclusivityCheck = document.getElementById('hunter-exclusivity');
-    const banSelect = document.getElementById('ban-count');
-    const timerEnabledCheck = document.getElementById('timer-enabled');
-    const timerDurationInput = document.getElementById('timer-duration');
-    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
+    resetLocalDraftState(); 
+    local.draftActive = true;
+    local.currentPhase = local.maxBansPerTeam > 0 ? 'ban' : 'pick';
+    local.currentTeam = 'A';
+    local.gameCounter++; 
 
-    local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
-    const totalBans = banSelect ? parseInt(banSelect.value) : 2;
-    local_maxBansPerTeam = totalBans / 2;
-    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false;
-    local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
-    if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION; // Ensure positive duration
-    local_draftOrderType = draftOrderSelect ? draftOrderSelect.value : 'Snake'; // NEW
+    UIUpdater.updateConfigInputsState(true); 
+    UIUpdater.disable(DOMElements.configButton, true);
+    UIUpdater.hide(DOMElements.configButton);
+    UIUpdater.hide(DOMElements.configPanel);
+    UIUpdater.disable(DOMElements.startDraftButton, true);
+    UIUpdater.hide(DOMElements.startDraftButton);
+    
+    HistoryRender.ensureGameHistoryContainer(local.gameCounter, false); 
+    UIUpdater.setText(DOMElements.gameCounterDisplay, `Game #${local.gameCounter}`);
+    UIUpdater.show(DOMElements.gameCounterDisplay);
 
-
-    // Reset state for the new draft
-    resetLocalState(); // Clears picks, bans, history, sets phase/team, stops timer
-    local_draftActive = true;
-    local_currentPhase = local_maxBansPerTeam > 0 ? 'ban' : 'pick'; // Set starting phase
-    local_currentTeam = 'A'; // Team A starts
-
-    disableLocalDraftControls(); // Disables config inputs etc.
-    const configPanel = document.getElementById('config');
-    if (configPanel) configPanel.classList.add('hidden');
-    const startButton = document.getElementById('start-draft');
-    if (startButton) startButton.disabled = true;
-
-
-    createLocalMatchHistoryEntry(); // Create the container div for this draft's history
-
-    updateStatusMessage();
-    updateCharacterPoolVisuals();
-    updateTeamDisplay();
-    updateTeamNamesUI(); // Disables team name edit buttons
-
-    const skipBanBtn = document.getElementById('skip-ban');
-    if (skipBanBtn) {
-        skipBanBtn.style.display = (local_currentPhase === 'ban') ? 'inline-block' : 'none';
-    }
-
-    // Start timer if enabled
-    if (local_timerEnabled) {
-        startTimer(local_timerDuration, 'local');
-    }
+    UIUpdater.updateStatusMessageText(); UIUpdater.updateCharacterPoolVisuals();
+    UIUpdater.updateTeamPicksDisplay([], []); UIUpdater.updateTeamNamesAndActionsUI(); 
+    UIUpdater.setProperty(DOMElements.skipBanButton, 'display', (local.currentPhase === 'ban') ? 'inline-block' : 'none');
+    if (local.timerEnabled) Timer.start(local.timerDuration);
 }
-
 
 function handleLocalSelect(charName) {
-    if (!local_draftActive || isMultiplayerMode || !isCharValidSelectionLocal(charName)) {
+    const local = appState.local;
+    if (!local.draftActive || appState.isMultiplayerMode || 
+        !DraftLogic.isCharValidSelection(charName, local.currentPhase, local.currentTeam, local.teamAPicks, local.teamBPicks, local.bannedCharacters, local.hunterExclusivity)) {
         return;
     }
+    const prevTeam = local.currentTeam; const prevPhase = local.currentPhase;
+    const prevPicksA = [...local.teamAPicks]; const prevPicksB = [...local.teamBPicks];
 
-    const currentTeam = local_currentTeam; // Capture before potential change
-    const currentPhase = local_currentPhase; // Capture before potential change
-    const currentPicksA = [...local_teamAPicks]; // Capture picks *before* adding
-    const currentPicksB = [...local_teamBPicks];
-
-    if (local_currentPhase === 'ban') {
-        local_bannedCharacters.push(charName);
-        recordAndDisplayLocalMatchHistory(currentTeam, currentPhase, charName); // Use captured state
-        updateCharacterPoolVisuals();
-        nextLocalPhase();
-    } else if (local_currentPhase === 'pick') {
-        if (local_currentTeam === 'A') {
-            local_teamAPicks.push(charName);
-        } else {
-            local_teamBPicks.push(charName);
-        }
-        // Pass the state *before* the pick to the history function
-        recordAndDisplayLocalMatchHistory(currentTeam, currentPhase, charName);
-        updateCharacterPoolVisuals();
-        updateTeamDisplay();
-        nextLocalPhase();
-    }
+    if (local.currentPhase === 'ban') local.bannedCharacters.push(charName);
+    else if (local.currentPhase === 'pick') { if (local.currentTeam === 'A') local.teamAPicks.push(charName); else local.teamBPicks.push(charName); }
+    
+    HistoryRender.recordAndDisplayLocalAction(prevTeam, prevPhase, charName, prevPicksA, prevPicksB);
+    UIUpdater.updateCharacterPoolVisuals();
+    if (local.currentPhase === 'pick') UIUpdater.updateTeamPicksDisplay(local.teamAPicks, local.teamBPicks);
+    advanceLocalPhase();
 }
-
 
 function handleLocalSkipBan() {
-    if (!local_draftActive || local_currentPhase !== 'ban' || isMultiplayerMode) return;
-
-    const currentTeam = local_currentTeam; // Capture state
-    const currentPhase = local_currentPhase;
-
-    const placeholder = `_skipped_ban_${local_currentTeam}_${local_bannedCharacters.length + 1}`;
-    local_bannedCharacters.push(placeholder); // Store placeholder
-
-    recordAndDisplayLocalMatchHistory(currentTeam, currentPhase, null); // Record skip
-    updateCharacterPoolVisuals(); // Update visuals (skipped ban doesn't directly affect pool)
-    nextLocalPhase();
+    const local = appState.local;
+    if (!local.draftActive || local.currentPhase !== 'ban' || appState.isMultiplayerMode) return;
+    const prevTeam = local.currentTeam; const prevPhase = local.currentPhase;
+    const prevPicksA = [...local.teamAPicks]; const prevPicksB = [...local.teamBPicks];
+    const placeholder = `_skipped_ban_${local.currentTeam}_${local.bannedCharacters.length + 1}`;
+    local.bannedCharacters.push(placeholder);
+    HistoryRender.recordAndDisplayLocalAction(prevTeam, prevPhase, null, prevPicksA, prevPicksB);
+    advanceLocalPhase();
 }
 
-
-function isCharValidSelectionLocal(charName) {
-    if (!local_draftActive) return false;
-
-    // Check if banned (only actual names, not placeholders)
-    if (local_bannedCharacters.some(b => b === charName)) {
-        return false;
-    }
-
-    if (local_currentPhase === 'ban') {
-        // Cannot ban if already picked by either team
-        return !local_teamAPicks.includes(charName) && !local_teamBPicks.includes(charName);
-    } else if (local_currentPhase === 'pick') {
-        // Check exclusivity
-        if (local_hunterExclusivity) {
-            if ((local_currentTeam === 'A' && local_teamBPicks.includes(charName)) ||
-                (local_currentTeam === 'B' && local_teamAPicks.includes(charName))) {
-                return false;
-            }
-        }
-        // Check self-picks
-        const myPicks = local_currentTeam === 'A' ? local_teamAPicks : local_teamBPicks;
-        return !myPicks.includes(charName);
-    }
-    return false;
+function advanceLocalPhase() {
+    const local = appState.local; if (!local.draftActive) return;
+    const totalBansMade = local.bannedCharacters.length; const totalExpectedBans = local.maxBansPerTeam * 2;
+    const totalPicksMade = local.teamAPicks.length + local.teamBPicks.length;
+    const { phase, team, draftOver } = DraftLogic.determineNextTurn(local.currentPhase, local.currentTeam, totalBansMade, totalExpectedBans, totalPicksMade, local.draftOrderType);
+    if (draftOver) { endLocalDraft(); return; }
+    local.currentPhase = phase; local.currentTeam = team;
+    UIUpdater.updateStatusMessageText(); UIUpdater.updateCharacterPoolVisuals();
+    UIUpdater.setProperty(DOMElements.skipBanButton, 'display', (local.draftActive && local.currentPhase === 'ban') ? 'inline-block' : 'none');
+    if (local.timerEnabled) Timer.start(local.timerDuration);
 }
-
-
-function nextLocalPhase() {
-    if (!local_draftActive) return;
-
-    const totalBansMade = local_bannedCharacters.length;
-    const totalExpectedBans = local_maxBansPerTeam * 2;
-    const totalPicksMade = local_teamAPicks.length + local_teamBPicks.length;
-
-    if (local_currentPhase === 'ban') {
-        if (totalBansMade >= totalExpectedBans) {
-            local_currentPhase = 'pick';
-            local_currentTeam = 'A'; // Team A always starts pick phase
-        } else {
-            local_currentTeam = local_currentTeam === 'A' ? 'B' : 'A'; // Alternate bans
-        }
-    } else if (local_currentPhase === 'pick') {
-        if (totalPicksMade >= TOTAL_PICKS_NEEDED) {
-            endLocalDraft();
-            return; // Exit early as draft is over
-        } else {
-            // Determine next picking team
-            if (local_draftOrderType === 'Alt') {
-                // Alt order: A B B A B A A B
-                // picksMadeCount is the number of picks *already completed*
-                const picksMadeCount = totalPicksMade;
-                if (picksMadeCount === 1) local_currentTeam = 'B';      // After A's 1st
-                else if (picksMadeCount === 2) local_currentTeam = 'B'; // After B's 1st
-                else if (picksMadeCount === 3) local_currentTeam = 'A'; // After B's 2nd
-                else if (picksMadeCount === 4) local_currentTeam = 'B'; // After A's 2nd
-                else if (picksMadeCount === 5) local_currentTeam = 'A'; // After B's 3rd
-                else if (picksMadeCount === 6) local_currentTeam = 'A'; // After A's 3rd
-                else if (picksMadeCount === 7) local_currentTeam = 'B'; // After A's 4th
-            } else { // Default to Snake order: A-BB-AA-BB-A
-                const currentPickIndex = totalPicksMade - 1; // 0-based index of the pick just made
-                if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
-                     local_currentTeam = 'B';
-                } else { // Indices 2, 3, 6
-                     local_currentTeam = 'A';
-                }
-            }
-        }
-    }
-
-    updateStatusMessage();
-    updateCharacterPoolVisuals();
-
-    const skipBanBtn = document.getElementById('skip-ban');
-    if (skipBanBtn) {
-        skipBanBtn.style.display = (local_draftActive && local_currentPhase === 'ban') ? 'inline-block' : 'none';
-    }
-
-    // Restart timer for the new turn if enabled
-    if (local_timerEnabled) {
-        startTimer(local_timerDuration, 'local');
-    }
-}
-
 
 function endLocalDraft() {
-    local_draftActive = false;
-    stopTimer('local'); // Stop the timer
-
-    const statusMessage = document.getElementById('status-message');
-    if (statusMessage) statusMessage.textContent = 'Local Draft Complete!';
-
-    const skipBan = document.getElementById('skip-ban');
-    if (skipBan) skipBan.style.display = 'none';
-
-    enableLocalDraftControls(); // Re-enable config, start button etc.
-    updateCharacterPoolVisuals(); // Update pool to show final state (not selectable)
+    appState.local.draftActive = false; Timer.stop(); UIUpdater.setText(DOMElements.statusMessage, 'Local Draft Complete!');
+    UIUpdater.hide(DOMElements.skipBanButton); UIUpdater.updateConfigInputsState(false); UIUpdater.enable(DOMElements.startDraftButton, true);
+    UIUpdater.enable(DOMElements.configButton);UIUpdater.show(DOMElements.configButton); UIUpdater.show(DOMElements.startDraftButton);
+    UIUpdater.updateCharacterPoolVisuals(); UIUpdater.updateTeamNamesAndActionsUI();
 }
 
-
-function handleLocalEditTeamName(event) {
-    if (isMultiplayerMode) {
-        alert("Use the appropriate multiplayer action."); // Should not happen if UI is right
-        return;
-    }
-    if (local_draftActive){
-        alert("Cannot change names during local draft.");
-        return;
-    }
-
-    const button = event.target;
-    const headingDiv = button.closest('div[id$="-heading"]');
-    if (!headingDiv) return;
-
-    const teamId = headingDiv.id.includes('a') ? 'A' : 'B';
-    const nameSpan = headingDiv.firstChild;
+function handleLocalEditTeamName(event) { 
+    if (appState.isMultiplayerMode || appState.local.draftActive) { UIUpdater.notifyUser("Cannot change names now.", 1500); return; }
+    const button = event.target; const headingDiv = button.closest('div.team-heading'); if (!headingDiv) return;
+    const teamId = headingDiv.id.includes('team-a') ? 'A' : 'B'; const nameSpan = headingDiv.firstChild;
     const currentName = nameSpan?.textContent?.replace('✎', '').trim() || (teamId === 'A' ? 'Team A' : 'Team B');
-
     const newName = prompt(`Enter new name for Team ${teamId}:`, currentName);
-
-    if (newName && newName.trim() !== "" && newName.trim().length <= 20) {
-        if (nameSpan) nameSpan.textContent = newName.trim() + ' ';
-        // Update local storage if needed, or just rely on UI state
-    } else if (newName !== null) { // User entered something invalid (empty or too long)
-        alert("Invalid name (max 20 chars).");
-    }
+    if (newName && newName.trim() !== "" && newName.trim().length <= 20) { if (nameSpan) nameSpan.textContent = newName.trim() + ' '; }
+    else if (newName !== null) { UIUpdater.notifyUser("Invalid name (max 20 chars).", 2000); }
 }
 
+const FirebaseOps = {
+    findCaptainUid(players, team) { 
+        if (!players) return null; for (const uid in players) { if (players[uid].role === 'captain' && players[uid].team === team) return uid; } return null;
+    },
 
-// ========================================================================= //
-// ==================== MULTIPLAYER MODE LOGIC ============================= //
-// ========================================================================= //
-
-function createRoom() {
-    if (!auth || !db || !mp_currentUserId || isMultiplayerMode) {
-        alert('Cannot create room: Check connection/auth or if already in a room.');
-        return;
-    }
-
-    console.log("Attempting to create multiplayer room...");
-
-    const datePrefix = `${new Date().getUTCMonth() + 1}${new Date().getUTCDate()}`;
-    const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const newDraftId = `${datePrefix}-${randomPart}`;
-
-    // Read config values from UI (creator sets the initial config)
-    const banSelect = document.getElementById('ban-count');
-    const exclusivityCheck = document.getElementById('hunter-exclusivity');
-    const timerEnabledCheck = document.getElementById('timer-enabled');
-    const timerDurationInput = document.getElementById('timer-duration');
-    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
-
-    const teamAHeading = document.getElementById('team-a-heading')?.firstChild;
-    const teamBHeading = document.getElementById('team-b-heading')?.firstChild;
-    const teamAName = teamAHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team A";
-    const teamBName = teamBHeading?.textContent?.replace(/[🔄✎]/, '').trim() || "Team B";
-    const totalBans = banSelect ? parseInt(banSelect.value) : 2;
-    let timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
-    if (timerDuration <= 0) timerDuration = DEFAULT_TIMER_DURATION;
-
-    const initialDraftState = {
-        settings: {
-            maxTotalBans: totalBans,
-            hunterExclusivity: exclusivityCheck ? exclusivityCheck.checked : true,
-            timerEnabled: timerEnabledCheck ? timerEnabledCheck.checked : false,
-            timerDuration: timerDuration,
-            draftOrderType: draftOrderSelect ? draftOrderSelect.value : 'Snake', // NEW
-            createdAt: serverTimestamp(),
-        },
-        status: 'waiting', // Initial status
-        teamAName: teamAName,
-        teamBName: teamBName,
-        teamASwapIntent: false,
-        teamBSwapIntent: false,
-        currentPhase: null,
-        currentTeam: null,
-        currentActionStartTime: null,
-        pickOrderIndex: 0, teamAPicks: [], teamBPicks: [], bannedCharacters: [],
-        players: {
-            [mp_currentUserId]: {
-                displayName: `${mp_currentUserId.substring(0, 4)}`,
-                team: 'A',
-                role: 'captain',
-                isConnected: true,
-                isReady: false
-            }
-        },
-    };
-
-    const draftRef = ref(db, `drafts/${newDraftId}`);
-
-    set(draftRef, initialDraftState).then(() => {
-        console.log("MP: Room created successfully:", newDraftId);
-
-        mp_currentDraftId = newDraftId;
-        mp_playerRole = 'captainA';
-        updateMode(true); // Switch to MP mode UI
-
-        sessionStorage.setItem('currentDraftId', newDraftId);
-        sessionStorage.setItem('playerRole', mp_playerRole);
-
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            navigator.clipboard.writeText(newDraftId).then(() => {
-                notifyUser(`Room Code copied to clipboard`, 2000);
-            }).catch(err => {
-                console.error('Failed to copy room code automatically: ', err);
-            });
-        } else {
-            console.warn('Clipboard API not supported.');
+    createRoom() {
+        if (!fbAuth || !fbDb || !appState.currentUserId || appState.isMultiplayerMode) {
+            UIUpdater.notifyUser('Cannot create room now.', 3000); return;
         }
+        console.log("MP: Attempting to create room...");
+        const now = new Date();
+        const datePrefix = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}`;
+        const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const newDraftId = `${datePrefix}-${randomPart}`;
 
-        updateUIAfterJoinCreate(newDraftId);
-        subscribeToDraft(newDraftId);
-        setupPresence(mp_currentUserId);
+        const teamAName = DOMElements.teamAHeading?.firstChild?.textContent?.replace(/[🔄✎]/, '').trim() || "Team A";
+        const teamBName = DOMElements.teamBHeading?.firstChild?.textContent?.replace(/[🔄✎]/, '').trim() || "Team B";
+        let timerDuration = parseInt(DOMElements.timerDurationInput.value) || DEFAULT_TIMER_DURATION_SECONDS;
+        if (timerDuration <= 0) timerDuration = DEFAULT_TIMER_DURATION_SECONDS;
 
-    }).catch(error => {
-        console.error("MP: Failed to create room:", error);
-        alert("Error creating room. Please try again.");
-        updateMode(false);
-    });
-}
+        const initialDraftState = {
+            settings: {
+                maxTotalBans: parseInt(DOMElements.banCountSelect.value),
+                hunterExclusivity: DOMElements.hunterExclusivityCheckbox.checked,
+                timerEnabled: DOMElements.timerEnabledCheckbox.checked,
+                timerDuration: timerDuration,
+                draftOrderType: DOMElements.draftOrderTypeSelect.value,
+                createdAt: serverTimestamp(),
+            },
+            currentGameNumber: 1, 
+            matchHistory: { // Initialize history for game 1
+                1: [] // Initialize as empty array
+            },     
+            status: 'waiting', teamAName, teamBName, teamASwapIntent: false, teamBSwapIntent: false,
+            currentPhase: null, currentTeam: null, currentActionStartTime: null,
+            pickOrderIndex: 0, teamAPicks: [], teamBPicks: [], bannedCharacters: [],
+            players: {
+                [appState.currentUserId]: {
+                    displayName: `${appState.currentUserId.substring(0, 4)}`, team: 'A', role: 'captain',
+                    isConnected: true, isReady: false
+                }
+            },
+        };
 
-function joinRoom(roomCodeInput) {
-    if (!auth || !db || !mp_currentUserId || isMultiplayerMode) {
-        alert('Cannot join room: Check connection/auth or if already in a room.');
-        return;
-    }
-
-    const roomCode = roomCodeInput.trim().toUpperCase();
-    if (!roomCode) {
-        alert('Please enter a valid room code.');
-        return;
-    }
-
-    console.log("Attempting to join multiplayer room:", roomCode);
-
-    const draftRef = ref(db, `drafts/${roomCode}`);
-    let joinedRole = null;
-    let joinedTeam = null;
-
-    runTransaction(draftRef, (currentData) => {
-        if (currentData === null) {
-            throw new Error(`Room ${roomCode} not found or access denied.`);
-        }
-
-        currentData.players = currentData.players || {};
-        const existingPlayer = currentData.players[mp_currentUserId];
-
-        if (existingPlayer) {
-            console.log(`MP Transaction: User ${mp_currentUserId} rejoining ${roomCode} as ${existingPlayer.role}.`);
-            currentData.players[mp_currentUserId].isConnected = true;
-            joinedRole = existingPlayer.role;
-            joinedTeam = existingPlayer.team;
-        } else {
-            console.log(`MP Transaction: User ${mp_currentUserId} joining ${roomCode} first time.`);
-            const captainAUid = findCaptainUid(currentData.players, 'A');
-            const captainBUid = findCaptainUid(currentData.players, 'B');
-
-            if (!captainAUid) {
-                 console.log(`MP Transaction: Assigning User ${mp_currentUserId} as Captain A.`);
-                 currentData.players[mp_currentUserId] = {
-                     displayName: `${mp_currentUserId.substring(0, 4)}`,
-                     team: 'A', role: 'captain', isConnected: true,
-                     isReady: false
-                 };
-                 joinedRole = 'captainA';
-                 joinedTeam = 'A';
-            } else if (!captainBUid) {
-                 console.log(`MP Transaction: Assigning User ${mp_currentUserId} as Captain B.`);
-                 currentData.players[mp_currentUserId] = {
-                     displayName: `${mp_currentUserId.substring(0, 4)}`,
-                     team: 'B', role: 'captain', isConnected: true,
-                     isReady: false
-                 };
-                 joinedRole = 'captainB';
-                 joinedTeam = 'B';
-            } else {
-                 console.log(`MP Transaction: Assigning User ${mp_currentUserId} as Spectator.`);
-                 currentData.players[mp_currentUserId] = {
-                     displayName: `${mp_currentUserId.substring(0, 4)}`,
-                     role: 'spectator',
-                     isConnected: true,
-                     team: null
-                 };
-                 joinedRole = 'spectator';
-            }
-        }
-        return currentData;
-
-    }).then(() => {
-        console.log("MP: Join room transaction successful for room:", roomCode);
-        if (!joinedRole) {
-             throw new Error("Internal error joining room: Role not assigned.");
-        }
-        mp_playerRole = joinedRole;
-        mp_currentDraftId = roomCode;
-        updateMode(true);
-        sessionStorage.setItem('currentDraftId', mp_currentDraftId);
-        sessionStorage.setItem('playerRole', mp_playerRole);
-        updateUIAfterJoinCreate(mp_currentDraftId);
-        subscribeToDraft(mp_currentDraftId);
-        setupPresence(mp_currentUserId);
-    }).catch((error) => {
-        console.error(`MP: Failed to join room ${roomCode}:`, error);
-        alert(`Error joining room: ${error.message || 'Unknown error.'}`);
-        if (isMultiplayerMode) {
-            leaveRoomCleanup();
-        } else {
-            updateMultiplayerButtonStates();
-        }
-    });
-}
-
-
-function subscribeToDraft(draftId) {
-    if (!db || !draftId) return;
-
-    if (mp_draftSubscription) {
-        try { mp_draftSubscription(); } catch(e) { console.warn("Error unsubscribing:", e); }
-        mp_draftSubscription = null;
-    }
-
-    const draftRef = ref(db, `drafts/${draftId}`);
-    console.log(`MP: Subscribing to draft ${draftId}`);
-
-    mp_draftSubscription = onValue(draftRef, (snapshot) => {
-        if (!isMultiplayerMode || mp_currentDraftId !== draftId) {
-            console.log(`MP: Received update for ${draftId}, but no longer in that draft. Ignoring & unsubscribing.`);
-            if (mp_draftSubscription) {
-                 try { mp_draftSubscription(); } catch(e) { /* ignore */ }
-                 mp_draftSubscription = null;
-            }
-            return;
-        }
-
-        const data = snapshot.val();
-        if (data) {
-            const previousStatus = mp_draftState?.status;
-            const previousActionStartTime = mp_draftState?.currentActionStartTime;
-            mp_draftState = data;
-
-            const myPlayerData = data.players?.[mp_currentUserId];
-            if (myPlayerData) {
-                 if (myPlayerData.role === 'captain') {
-                     mp_playerRole = myPlayerData.team === 'A' ? 'captainA' : 'captainB';
-                 } else if (myPlayerData.role === 'spectator') {
-                     mp_playerRole = 'spectator';
-                 } else {
-                     mp_playerRole = null;
-                 }
-                 sessionStorage.setItem('playerRole', mp_playerRole);
-            } else {
-                 console.warn(`MP: Player data for ${mp_currentUserId} not found in received state for ${draftId}.`);
-                 mp_playerRole = null;
-                 sessionStorage.removeItem('playerRole');
-            }
-
-            renderMultiplayerUI(data);
-
-            if (data.status === 'in_progress' && data.currentActionStartTime && data.currentActionStartTime !== previousActionStartTime) {
-                 startMultiplayerTimerFromState(data);
-            } else if (data.status !== 'in_progress' && mp_timerIntervalId) {
-                 stopTimer('multiplayer');
-            } else if (data.settings?.timerEnabled === false && mp_timerIntervalId) {
-                stopTimer('multiplayer');
-            } else if (data.settings?.timerEnabled && data.status === 'in_progress' && data.currentActionStartTime && !mp_timerIntervalId) {
-                startMultiplayerTimerFromState(data);
-            }
-        } else {
-            console.warn(`MP: Received null data for draft ${draftId}. Room deleted or inaccessible?`);
-            if (isMultiplayerMode && mp_currentDraftId === draftId) {
-                 alert(`Room ${draftId} closed or does not exist anymore.`);
-                 leaveRoomCleanup();
-            }
-            if (mp_draftSubscription) {
-                 try { mp_draftSubscription(); } catch(e) { /* ignore */ }
-                 mp_draftSubscription = null;
-            }
-        }
-    }, (error) => {
-        console.error(`MP: Firebase subscription error for ${draftId}:`, error);
-        if (isMultiplayerMode && mp_currentDraftId === draftId) {
-            alert("Connection error listening to draft. Check connection or refresh.");
-            leaveRoomCleanup();
-        }
-        if (mp_draftSubscription) {
-             try { mp_draftSubscription(); } catch(e) { /* ignore */ }
-             mp_draftSubscription = null;
-        }
-    });
-}
-
-
-function leaveRoomCleanup() {
-    const leavingDraftId = mp_currentDraftId;
-    const leavingUserId = mp_currentUserId;
-
-    console.log(`MP: Initiating leave cleanup for ${leavingUserId} from ${leavingDraftId}`);
-
-    if (db && leavingUserId && leavingDraftId) {
-        const playerRef = ref(db, `drafts/${leavingDraftId}/players/${leavingUserId}`);
-        const updates = {};
-        updates[`/players/${leavingUserId}/isConnected`] = false;
-
-        const currentRole = mp_playerRole;
-        if (currentRole === 'captainA' || currentRole === 'captainB') {
-            updates[`/players/${leavingUserId}/isReady`] = false;
-             if (currentRole === 'captainA') updates['/teamASwapIntent'] = false;
-             if (currentRole === 'captainB') updates['/teamBSwapIntent'] = false;
-        }
-
-        update(ref(db, `drafts/${leavingDraftId}`), updates)
-            .then(() => console.log(`MP: Marked ${leavingUserId} as disconnected (and potentially reset ready/intent) in ${leavingDraftId}.`))
-            .catch(err => console.warn("MP: Minor error marking self offline/resetting state:", err));
-
-        onDisconnect(playerRef).cancel()
-             .then(() => console.log(`MP: Cancelled onDisconnect hook for draft ${leavingDraftId} player.`))
-             .catch(err => console.warn("MP: Minor error cancelling draft player disconnect hook:", err));
-    } else {
-        console.log("MP: Skipping Firebase state update on leave (DB/User/DraftID missing).");
-    }
-
-    resetMultiplayerState();
-    updateMode(false);
-    updateStatusMessage();
-    console.log("MP: Leave cleanup complete. Switched to local mode.");
-}
-
-
-function renderMultiplayerUI(data) {
-    if (!isMultiplayerMode || !data) return;
-
-    updateTeamNamesUI();
-    updateStatusMessage();
-    updateTeamDisplay();
-    updateCharacterPoolVisuals();
-
-    const startDraftBtn = document.getElementById('start-draft');
-    const skipBanButton = document.getElementById('skip-ban');
-    const leaveButton = document.getElementById('leave-room-button');
-    const readyButton = document.getElementById('ready-button');
-    const configButton = document.getElementById('config-button');
-    const configPanel = document.getElementById('config');
-
-    if (!startDraftBtn || !skipBanButton || !leaveButton || !readyButton || !configButton || !configPanel) {
-        console.warn("MP renderMultiplayerUI: One or more control buttons or config panel missing.");
-        return;
-    }
-
-    const draftStatus = data.status || 'setup';
-    const iAmCaptainA = mp_playerRole === 'captainA';
-    const iAmCaptainB = mp_playerRole === 'captainB';
-    const isSpectator = mp_playerRole === 'spectator';
-    const isMyCaptainRole = iAmCaptainA || iAmCaptainB;
-
-    let playerA = null, playerB = null;
-    let myPlayerData = null;
-    let iAmReady = false;
-
-    if (data.players) {
-        myPlayerData = data.players[mp_currentUserId];
-        for (const uid in data.players) {
-            const p = data.players[uid];
-            if (p.role === 'captain') {
-                if (p.team === 'A') playerA = p;
-                if (p.team === 'B') playerB = p;
-            }
-        }
-        iAmReady = isMyCaptainRole && myPlayerData?.isReady === true;
-    }
-    const bothConnected = playerA?.isConnected && playerB?.isConnected;
-    const bothReady = playerA?.isReady && playerB?.isReady;
-    const isDraftActive = draftStatus === 'in_progress';
-
-    configButton.style.display = isDraftActive ? 'none' : 'inline-block';
-    if (isDraftActive) {
-        configPanel.classList.add('hidden');
-    }
-    configButton.disabled = isDraftActive || !iAmCaptainA;
-    updateConfigInputsState(isDraftActive || !iAmCaptainA, true);
-
-    const showReadyButton = !isDraftActive && !isSpectator && isMyCaptainRole;
-    readyButton.style.display = showReadyButton ? 'inline-block' : 'none';
-    if (showReadyButton) {
-        readyButton.disabled = false;
-        readyButton.textContent = iAmReady ? "Unready" : "Ready Up";
-    }
-
-    const showStartButton = !isDraftActive && iAmCaptainA;
-    if (showStartButton) {
-        startDraftBtn.style.display = 'inline-block';
-        startDraftBtn.disabled = !(bothConnected && bothReady);
-        startDraftBtn.textContent = "Start Draft";
-    } else {
-        startDraftBtn.style.display = 'none';
-    }
-
-    const myTurn = (data.currentTeam === 'A' && iAmCaptainA) || (data.currentTeam === 'B' && iAmCaptainB);
-    const showSkip = isDraftActive && data.currentPhase === 'ban' && myTurn && !isSpectator;
-    skipBanButton.style.display = showSkip ? 'inline-block' : 'none';
-    skipBanButton.disabled = !showSkip;
-
-    leaveButton.classList.remove('hidden');
-    disableMultiplayerJoinCreateButtons();
-}
-
-
-function handleMultiplayerSelect(charName) {
-    if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !mp_playerRole || mp_playerRole === 'spectator') {
-        console.warn("MP Select cancelled: Conditions not met."); return;
-    }
-    const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {}));
-    const teamBeforeUpdate = stateBeforeUpdate.currentTeam;
-    const phaseBeforeUpdate = stateBeforeUpdate.currentPhase;
-    const picksABeforeUpdate = [...(stateBeforeUpdate.teamAPicks || [])];
-    const picksBBeforeUpdate = [...(stateBeforeUpdate.teamBPicks || [])];
-
-    runTransaction(draftRef, (currentData) => {
-        if (!currentData) { console.warn("MP Select TXN: Draft data null."); return; }
-        if (currentData.status !== 'in_progress') { console.log("MP Select TXN: Draft not in progress."); return; }
-
-        const myPlayerData = currentData.players?.[mp_currentUserId];
-        if (!myPlayerData || myPlayerData.role !== 'captain') {
-             console.log("MP Select TXN: Player data not found or not captain."); return;
-        }
-        const expectedTeam = myPlayerData.team;
-        const isMyTurn = currentData.currentTeam === expectedTeam;
-
-        if (!isMyTurn) { console.log("MP Select TXN: Not turn."); return; }
-        if (!isCharValidSelectionMP(charName, currentData)) { console.log(`MP Select TXN: Invalid char ${charName}.`); return; }
-
-        currentData.bannedCharacters = currentData.bannedCharacters || [];
-        currentData.teamAPicks = currentData.teamAPicks || [];
-        currentData.teamBPicks = currentData.teamBPicks || [];
-        let updated = false;
-
-        if (currentData.currentPhase === 'ban') {
-            currentData.bannedCharacters.push(charName);
-            updated = true;
-        } else if (currentData.currentPhase === 'pick') {
-            if (expectedTeam === 'A') {
-                currentData.teamAPicks.push(charName);
-            } else {
-                currentData.teamBPicks.push(charName);
-            }
-            updated = true;
-        }
-
-        if (updated) {
-             recordAndDisplayMultiplayerMatchHistory(teamBeforeUpdate, phaseBeforeUpdate, charName, picksABeforeUpdate, picksBBeforeUpdate);
-            return calculateNextStateMP(currentData);
-        } else {
-            console.warn("MP Select TXN: Update flag not set, phase invalid?");
-            return;
-        }
-    }).catch((error) => {
-        console.error("MP Select transaction failed:", error);
-        notifyUser(`Selection Error: ${error.message}`, 3000);
-    });
-}
-
-
-function handleMultiplayerSkipBan() {
-    if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !mp_playerRole || mp_playerRole === 'spectator') {
-         console.warn("MP Skip Ban cancelled: Conditions not met."); return;
-    }
-    const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-    const stateBeforeUpdate = JSON.parse(JSON.stringify(mp_draftState || {}));
-    const teamBeforeUpdate = stateBeforeUpdate.currentTeam;
-    const phaseBeforeUpdate = stateBeforeUpdate.currentPhase;
-    const picksABeforeUpdate = [...(stateBeforeUpdate.teamAPicks || [])];
-    const picksBBeforeUpdate = [...(stateBeforeUpdate.teamBPicks || [])];
-
-    runTransaction(draftRef, (currentData) => {
-        if (!currentData) { console.warn("MP Skip Ban TXN: Draft data null."); return; }
-        if (currentData.status !== 'in_progress' || currentData.currentPhase !== 'ban') { console.log("MP Skip Ban TXN: Not ban phase."); return; }
-
-        const myPlayerData = currentData.players?.[mp_currentUserId];
-        if (!myPlayerData || myPlayerData.role !== 'captain') {
-             console.log("MP Skip Ban TXN: Player data not found or not captain."); return;
-        }
-        const expectedTeam = myPlayerData.team;
-        const isMyTurn = currentData.currentTeam === expectedTeam;
-
-        if (!isMyTurn) { console.log("MP Skip Ban TXN: Not turn."); return; }
-
-        currentData.bannedCharacters = currentData.bannedCharacters || [];
-        const banIndex = currentData.bannedCharacters.length;
-        const placeholder = `_skipped_ban_${expectedTeam}_${banIndex + 1}`;
-        currentData.bannedCharacters.push(placeholder);
-
-         recordAndDisplayMultiplayerMatchHistory(teamBeforeUpdate, phaseBeforeUpdate, null, picksABeforeUpdate, picksBBeforeUpdate);
-        return calculateNextStateMP(currentData);
-    }).catch((error) => {
-        console.error("MP Skip Ban transaction failed:", error);
-        notifyUser(`Skip Ban Error: ${error.message}`, 3000);
-    });
-}
-
-function handleMultiplayerReadyUp() {
-    if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !(mp_playerRole === 'captainA' || mp_playerRole === 'captainB')) {
-         console.warn("MP Ready/Unready cancelled: Conditions not met."); return;
-    }
-    if (mp_draftState?.status !== 'waiting' && mp_draftState?.status !== 'complete') {
-        console.log("MP Ready/Unready: Can only change ready state when 'waiting' or 'complete'.");
-        return;
-    }
-
-    const playerRef = ref(db, `drafts/${mp_currentDraftId}/players/${mp_currentUserId}`);
-    const currentReadyState = mp_draftState?.players?.[mp_currentUserId]?.isReady ?? false;
-    const newReadyState = !currentReadyState;
-    console.log(`MP: Player ${mp_currentUserId} setting ready state to ${newReadyState}.`);
-
-    const updates = { isReady: newReadyState };
-    if (mp_playerRole === 'captainA') updates['/teamASwapIntent'] = false;
-    if (mp_playerRole === 'captainB') updates['/teamBSwapIntent'] = false;
-
-    update(ref(db, `drafts/${mp_currentDraftId}`), {
-        [`/players/${mp_currentUserId}/isReady`]: newReadyState,
-        ...(mp_playerRole === 'captainA' ? { teamASwapIntent: false } : {}),
-        ...(mp_playerRole === 'captainB' ? { teamBSwapIntent: false } : {}),
-    })
-        .then(() => {
-            console.log(`MP: Player ${mp_currentUserId} ready state set to ${newReadyState} and swap intent reset.`);
-        })
-        .catch((error) => {
-            console.error(`MP: Failed to update ready status/reset intent for ${mp_currentUserId}:`, error);
-            alert("Error setting ready status. Please try again.");
+        set(ref(fbDb, `drafts/${newDraftId}`), initialDraftState).then(() => {
+            console.log(`MP: Room created: ${newDraftId}, Creator UID: ${appState.currentUserId}`);
+            appState.multiplayer.currentDraftId = newDraftId;
+            appState.multiplayer.playerRole = 'captainA';
+            updateApplicationMode(true); 
+            sessionStorage.setItem('currentDraftId', newDraftId);
+            sessionStorage.setItem('playerRole', 'captainA');
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(newDraftId)
+                    .then(() => UIUpdater.notifyUser(`Room Code copied to your clipboard!`, 2500))
+                    .catch(err => { console.warn('Failed to copy room code:', err); UIUpdater.notifyUser(`Room Code copy to clipboard failed: ${newDraftId}`, 3000);});
+            } else { UIUpdater.notifyUser(`Room Code: ${newDraftId} (manual copy)`, 3000); console.log(`Room Code for manual copy: ${newDraftId}`); }
+            
+            FirebaseOps.subscribeToDraftChanges(newDraftId);
+            FirebaseOps.setupPresence(appState.currentUserId);
+        }).catch(error => {
+            console.error("MP: Failed to create room:", error);
+            UIUpdater.notifyUser("Error creating room.", 3000);
+            updateApplicationMode(false);
         });
-}
+    },
 
+    joinRoom(roomCodeInput) { 
+        if (!fbAuth || !fbDb || !appState.currentUserId || appState.isMultiplayerMode) { UIUpdater.notifyUser('Cannot join room now.', 3000); return; }
+        const roomCode = roomCodeInput.trim().toUpperCase(); if (!roomCode) { UIUpdater.notifyUser('Please enter a room code.', 2000); return; }
+        console.log(`MP: User ${appState.currentUserId} attempting to join room: ${roomCode}`);
+        const draftRef = ref(fbDb, `drafts/${roomCode}`); let joinedAsRole = null;
+        runTransaction(draftRef, (currentData) => {
+            if (currentData === null) throw new Error(`Room ${roomCode} not found.`); currentData.players = currentData.players || {};
+            const existingPlayer = currentData.players[appState.currentUserId];
+            if (existingPlayer) { currentData.players[appState.currentUserId].isConnected = true; joinedAsRole = existingPlayer.role === 'captain' ? (existingPlayer.team === 'A' ? 'captainA' : 'captainB') : 'spectator';
+            } else { const captainAUid = FirebaseOps.findCaptainUid(currentData.players, 'A'); const captainBUid = FirebaseOps.findCaptainUid(currentData.players, 'B'); let assignedTeam = null;
+                if (!captainAUid) { assignedTeam = 'A'; joinedAsRole = 'captainA'; } else if (!captainBUid) { assignedTeam = 'B'; joinedAsRole = 'captainB'; } else { joinedAsRole = 'spectator'; }
+                currentData.players[appState.currentUserId] = { displayName: `${appState.currentUserId.substring(0, 4)}`, team: assignedTeam, role: (assignedTeam ? 'captain' : 'spectator'), isConnected: true, isReady: false };
+            } return currentData;
+        }).then(() => {
+            console.log(`MP: User ${appState.currentUserId} successfully joined ${roomCode} as ${joinedAsRole}`);
+            appState.multiplayer.playerRole = joinedAsRole; appState.multiplayer.currentDraftId = roomCode;
+            updateApplicationMode(true); sessionStorage.setItem('currentDraftId', roomCode); sessionStorage.setItem('playerRole', joinedAsRole);
+            FirebaseOps.subscribeToDraftChanges(roomCode); FirebaseOps.setupPresence(appState.currentUserId);
+        }).catch((error) => { console.error(`MP: Failed to join room ${roomCode}:`, error); UIUpdater.notifyUser(`Error joining: ${error.message || 'Unknown error.'}`, 3000); if (appState.isMultiplayerMode) FirebaseOps.leaveRoomCleanup(); else UIUpdater.updateMultiplayerButtonVisibility(); });
+    },
 
-function handleMultiplayerStartDraft() {
-    if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || mp_playerRole !== 'captainA') {
-         alert("Only Team A captain can start the draft when both are ready.");
-         return;
-    }
-    const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
+    subscribeToDraftChanges(draftId) {
+        if (!fbDb || !draftId) return;
+        if (appState.mpDraftSubscription) try { appState.mpDraftSubscription(); } catch(e) { console.warn("Error unsubscribing:", e); }
 
-    runTransaction(draftRef, (currentData) => {
-        if (!currentData) { console.warn("MP Start Draft TXN: Draft data null."); return; }
-        if (currentData.status !== 'waiting' && currentData.status !== 'complete') {
-            console.log("MP Start Draft TXN: Can only start from 'waiting' or 'complete' status."); return;
-        }
+        const draftRef = ref(fbDb, `drafts/${draftId}`);
+        console.log(`MP: Subscribing to draft ${draftId}`);
+        appState.mpDraftSubscription = onValue(draftRef, (snapshot) => {
+            if (!appState.isMultiplayerMode || appState.multiplayer.currentDraftId !== draftId) {
+                if (appState.mpDraftSubscription) try { appState.mpDraftSubscription(); } catch(e) {/*ignore*/}
+                appState.mpDraftSubscription = null; return;
+            }
+            const data = snapshot.val();
+            if (data) {
+                const previousState = appState.multiplayer.draftState;
+                appState.multiplayer.draftState = data; // Update local cache
 
-        let playerA = null, playerB = null;
-        let playerAUid = null, playerBUid = null;
-        if (currentData.players) {
-             for (const uid in currentData.players) {
-                const p = currentData.players[uid];
-                if (p.role === 'captain') {
-                    if (p.team === 'A') { playerA = p; playerAUid = uid;}
-                    if (p.team === 'B') { playerB = p; playerBUid = uid;}
+                // Update player role
+                const myPlayerData = data.players?.[appState.currentUserId];
+                if (myPlayerData) {
+                    const newPlayerRole = myPlayerData.role === 'captain' ? (myPlayerData.team === 'A' ? 'captainA' : 'captainB') : 'spectator';
+                    if (appState.multiplayer.playerRole !== newPlayerRole) {
+                        appState.multiplayer.playerRole = newPlayerRole; sessionStorage.setItem('playerRole', newPlayerRole);
+                    }
+                } else if (appState.multiplayer.playerRole !== null) {
+                    appState.multiplayer.playerRole = null; sessionStorage.removeItem('playerRole');
                 }
-             }
-        }
-        if (!playerA || !playerB || !playerA.isConnected || !playerB.isConnected || !playerA.isReady || !playerB.isReady) {
-            throw new Error("Both captains must be connected and ready to start.");
-        }
+                
+                // Check for new game start to clear picks display (history handled in render)
+                const prevStatus = previousState?.status;
+                const prevActionTime = previousState?.currentActionStartTime;
+                if (data.status === 'in_progress' && (prevStatus === 'waiting' || prevStatus === 'complete') && data.currentActionStartTime !== prevActionTime) {
+                    console.log(`MP: New game detected (Game #${data.currentGameNumber}). Clearing picks display.`);
+                    UIUpdater.updateTeamPicksDisplay([], []); // Clear visual picks for new game
+                    // History container creation/update is handled within renderMultiplayerMainUI
+                }
+                
+                UIUpdater.renderMultiplayerMainUI(data); // This will render everything including history
 
-        console.log("MP Start Draft TXN: Resetting state for new draft.");
-        currentData.teamAPicks = [];
-        currentData.teamBPicks = [];
-        currentData.bannedCharacters = [];
-        currentData.pickOrderIndex = 0;
-        currentData.teamASwapIntent = false;
-        currentData.teamBSwapIntent = false;
-        if (currentData.players) {
-            if(playerAUid) currentData.players[playerAUid].isReady = false;
-            if(playerBUid) currentData.players[playerBUid].isReady = false;
-        }
+                // Timer logic
+                if (data.status === 'in_progress' && data.currentActionStartTime && data.currentActionStartTime !== prevActionTime) {
+                    Timer.startMultiplayerTimerFromFirebaseState(data);
+                } else if (data.status !== 'in_progress' && appState.multiplayer.timerIntervalId) {
+                    Timer.stop();
+                } else if (data.settings?.timerEnabled === false && appState.multiplayer.timerIntervalId) {
+                    Timer.stop();
+                } else if (data.settings?.timerEnabled && data.status === 'in_progress' && data.currentActionStartTime && !appState.multiplayer.timerIntervalId) {
+                     Timer.startMultiplayerTimerFromFirebaseState(data); 
+                }
 
-        currentData.status = 'in_progress';
-        const maxTotalBans = currentData.settings?.maxTotalBans ?? 0;
-        const startPhase = maxTotalBans > 0 ? 'ban' : 'pick';
-        currentData.currentPhase = startPhase;
-        currentData.currentTeam = 'A';
-        currentData.currentActionStartTime = serverTimestamp();
-
-        mp_matchHistory = [];
-        createMultiplayerMatchHistoryEntry();
-        return currentData;
-    }).catch(err => {
-        console.error("MP Failed to start draft transaction:", err);
-        alert(`Failed to start draft: ${err.message}`);
-    });
-}
-
-
-function handleMultiplayerEditTeamName(event) {
-    if (!db || !isMultiplayerMode || !mp_currentDraftId || !mp_currentUserId || !mp_draftState) return;
-
-    const button = event.target;
-    const headingDiv = button.closest('div[id$="-heading"]');
-    if (!headingDiv) return;
-    const teamId = headingDiv.id.includes('team-a') ? 'A' : 'B';
-    const nameSpan = headingDiv.firstChild;
-    const currentName = nameSpan?.textContent?.replace('✎', '').trim() || (teamId === 'A' ? 'Team A' : 'Team B');
-
-    const myPlayerData = mp_draftState.players?.[mp_currentUserId];
-    const draftStatus = mp_draftState.status;
-    const canEdit = (myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (draftStatus === 'waiting' || draftStatus === 'complete'));
-
-    if (!canEdit) {
-        alert("Can only edit your team's name before the draft starts or after it completes."); return;
-    }
-
-    const newName = prompt(`Enter new name for Team ${teamId}:`, currentName);
-
-    if (newName && newName.trim() !== "" && newName.trim().length <= 20) {
-        const teamNameRef = ref(db, `drafts/${mp_currentDraftId}/team${teamId}Name`);
-        set(teamNameRef, newName.trim())
-            .then(() => console.log(`MP: Team ${teamId} name updated.`))
-            .catch(err => { console.error("MP Failed to update team name:", err); alert("Error updating name."); });
-    } else if (newName !== null) {
-        alert("Invalid name (max 20 chars).");
-    }
-}
-
-function handleMultiplayerConfigUpdate(settingName, value) {
-    if (!db || !isMultiplayerMode || !mp_currentDraftId || mp_playerRole !== 'captainA') {
-         console.warn("MP Config Update cancelled: Conditions not met (not MP, no draft ID, or not Captain A).");
-         updateConfigInputsState(false, true);
-         return;
-    }
-
-    const draftStatus = mp_draftState?.status;
-    if (draftStatus !== 'waiting' && draftStatus !== 'complete') {
-         console.warn("MP Config Update cancelled: Can only change config when waiting or complete.");
-         updateConfigInputsState(false, true);
-         return;
-    }
-
-    console.log(`MP: Captain A updating setting '${settingName}' to '${value}'`);
-
-    // Ensure specific numeric conversions for certain settings
-    let processedValue = value;
-    if (settingName === 'maxTotalBans' || settingName === 'timerDuration') {
-        processedValue = parseInt(value);
-        if (isNaN(processedValue)) {
-            console.error(`MP Config Update: Invalid numeric value for ${settingName}: ${value}`);
-            updateConfigInputsState(false, true); // Revert UI
-            return;
-        }
-    }
-
-
-    const settingRef = ref(db, `drafts/${mp_currentDraftId}/settings/${settingName}`);
-    set(settingRef, processedValue)
-        .then(() => console.log(`MP: Setting '${settingName}' updated successfully.`))
-        .catch((error) => {
-            console.error(`MP: Failed to update setting '${settingName}':`, error);
-            alert(`Error updating setting: ${settingName}. Please try again.`);
-             updateConfigInputsState(false, true);
+            } else { 
+                UIUpdater.notifyUser(`Room ${draftId} closed or not found.`, 3000);
+                FirebaseOps.leaveRoomCleanup();
+            }
+        }, (error) => {
+            console.error(`MP: Firebase subscription error for ${draftId}:`, error);
+            UIUpdater.notifyUser("Connection error to draft. Refresh.", 3000);
+            FirebaseOps.leaveRoomCleanup();
         });
-}
+    },
 
+    leaveRoomCleanup() { 
+        console.log("MP: Initiating leave room cleanup."); const leavingDraftId = appState.multiplayer.currentDraftId; const leavingUserId = appState.currentUserId;
+        if (fbDb && leavingUserId && leavingDraftId) { const playerPath = `drafts/${leavingDraftId}/players/${leavingUserId}`; const updates = {}; updates[`${playerPath}/isConnected`] = false; const currentRole = appState.multiplayer.playerRole; if (currentRole === 'captainA' || currentRole === 'captainB') { updates[`${playerPath}/isReady`] = false; if (currentRole === 'captainA') updates[`drafts/${leavingDraftId}/teamASwapIntent`] = false; if (currentRole === 'captainB') updates[`drafts/${leavingDraftId}/teamBSwapIntent`] = false; } update(ref(fbDb), updates).catch(err => console.warn("MP: Minor error marking self offline/resetting intent:", err)); onDisconnect(ref(fbDb, playerPath)).cancel().catch(err => console.warn("MP: Minor error cancelling draft player disconnect hook:", err)); }
+        resetMultiplayerSessionState(); updateApplicationMode(false); UIUpdater.updateStatusMessageText();
+    },
 
-function handleSwapIntentClick(event) {
-    if (!db || !isMultiplayerMode || !mp_currentUserId || !mp_currentDraftId || !mp_draftState || !(mp_playerRole === 'captainA' || mp_playerRole === 'captainB')) {
-        console.warn("Swap Intent Click Ignored: Conditions not met.");
-        return;
-    }
-
-    const draftStatus = mp_draftState.status;
-    if (draftStatus !== 'waiting' && draftStatus !== 'complete') {
-        console.log("Swap Intent Click Ignored: Can only swap in 'waiting' or 'complete' status.");
-        return;
-    }
-
-    const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-    const myCurrentTeam = mp_playerRole === 'captainA' ? 'A' : 'B';
-
-    console.log(`Swap intent click by Captain ${myCurrentTeam}`);
-
-    runTransaction(draftRef, (currentData) => {
-        if (!currentData) {
-             console.warn("Swap TXN: Draft data is null."); return;
+    setupPresence(userId) { 
+        if (!fbDb || !userId) { console.warn("Presence: Skipped, no DB or UID."); return; }
+        const userStatusDatabaseRef = ref(fbDb, `/status/${userId}`); const connectedRef = ref(fbDb, '.info/connected'); console.log(`Presence: Setting up for UID ${userId}`);
+        onValue(connectedRef, (snapshot) => {
+            if (snapshot.val() === false) { console.log("Presence: Not connected to Firebase RTDB."); return; }
+            console.log("Presence: Connected. Setting online status and onDisconnect for global status.");
+            onDisconnect(userStatusDatabaseRef).set({ state: 'offline', last_changed: serverTimestamp() }).then(() => set(userStatusDatabaseRef, { state: 'online', last_changed: serverTimestamp() }));
+            const currentDraftId = appState.multiplayer.currentDraftId; const currentRole = appState.multiplayer.playerRole;
+            if (appState.isMultiplayerMode && currentDraftId && userId) {
+                console.log(`Presence: Setting up draft-specific onDisconnect for ${userId} in ${currentDraftId}, role: ${currentRole}`);
+                const playerDraftPath = `drafts/${currentDraftId}/players/${userId}`; const onDisconnectUpdates = {}; onDisconnectUpdates[`${playerDraftPath}/isConnected`] = false;
+                if (currentRole === 'captainA') { onDisconnectUpdates[`${playerDraftPath}/isReady`] = false; onDisconnectUpdates[`drafts/${currentDraftId}/teamASwapIntent`] = false; }
+                else if (currentRole === 'captainB') { onDisconnectUpdates[`${playerDraftPath}/isReady`] = false; onDisconnectUpdates[`drafts/${currentDraftId}/teamBSwapIntent`] = false; }
+                onDisconnect(ref(fbDb)).update(onDisconnectUpdates).then(() => { console.log(`Presence: Draft onDisconnect set for ${userId}. Now setting isConnected: true.`); update(ref(fbDb, playerDraftPath), { isConnected: true }); }).catch(err => console.error("MP Presence Error (draft specific onDisconnect):", err));
+            } else { console.log("Presence: Not in MP mode or no draft ID, skipping draft-specific onDisconnect."); }
+        });
+    },
+    
+    handleMultiplayerSelectAction(charName, isSkip = false) {
+        const mpState = appState.multiplayer;
+        if (!fbDb || !appState.isMultiplayerMode || !appState.currentUserId || !mpState.currentDraftId || mpState.playerRole === 'spectator') {
+            console.warn("MP Select/Skip: Conditions not met."); return;
         }
-        if (currentData.status !== 'waiting' && currentData.status !== 'complete') {
-             console.warn("Swap TXN: Status changed, aborting swap."); return;
-        }
+        const draftRef = ref(fbDb, `drafts/${mpState.currentDraftId}`);
+        
+        runTransaction(draftRef, (currentData) => {
+            if (!currentData) { console.warn("MP TXN: No current data."); return; } 
+            if (currentData.status !== 'in_progress') { console.log("MP TXN: Draft not in progress."); return; } 
 
-        const capAUid = findCaptainUid(currentData.players, 'A');
-        const capBUid = findCaptainUid(currentData.players, 'B');
-        const onlyOneCaptain = (capAUid && !capBUid) || (!capAUid && capBUid);
-        const bothCaptains = capAUid && capBUid;
+            const myPlayerData = currentData.players?.[appState.currentUserId];
+            if (!myPlayerData || myPlayerData.role !== 'captain' || currentData.currentTeam !== myPlayerData.team) {
+                console.log("MP TXN: Not player's turn or not captain."); return;
+            }
 
-        if (onlyOneCaptain) {
-            const singleCaptainUid = capAUid || capBUid;
-            const singleCaptainTeam = capAUid ? 'A' : 'B';
+            if (!isSkip && !DraftLogic.isCharValidSelection(charName, currentData.currentPhase, myPlayerData.team, currentData.teamAPicks || [], currentData.teamBPicks || [], currentData.bannedCharacters || [], currentData.settings?.hunterExclusivity)) {
+                console.log(`MP TXN: Invalid selection: ${charName}`); return; 
+            }
+            
+            currentData.bannedCharacters = currentData.bannedCharacters || [];
+            currentData.teamAPicks = currentData.teamAPicks || [];
+            currentData.teamBPicks = currentData.teamBPicks || [];
+            let actionTaken = false;
+            let historyString = ""; // Simplified history entry
 
-            if (singleCaptainUid === mp_currentUserId && myCurrentTeam === singleCaptainTeam) {
-                console.log(`Swap TXN: Single captain ${singleCaptainTeam} initiating immediate swap.`);
-                const tempName = currentData.teamAName;
-                currentData.teamAName = currentData.teamBName;
-                currentData.teamBName = tempName;
-                if (currentData.status === 'complete') {
-                    const tempPicks = currentData.teamAPicks;
-                    currentData.teamAPicks = currentData.teamBPicks;
-                    currentData.teamBPicks = tempPicks;
-                }
-                if (currentData.players && currentData.players[singleCaptainUid]) {
-                    currentData.players[singleCaptainUid].team = (singleCaptainTeam === 'A' ? 'B' : 'A');
+            // Determine pick number *before* modifying arrays
+            let pickNumber = 0;
+            if (currentData.currentPhase === 'pick' && !isSkip) {
+                pickNumber = (myPlayerData.team === 'A' ? (currentData.teamAPicks?.length || 0) : (currentData.teamBPicks?.length || 0)) + 1;
+            }
+
+            if (currentData.currentPhase === 'ban') {
+                if (isSkip) {
+                    const placeholder = `_skipped_ban_${myPlayerData.team}_${currentData.bannedCharacters.length + 1}`;
+                    currentData.bannedCharacters.push(placeholder);
+                    historyString = `${myPlayerData.team}0 Null. `; 
                 } else {
-                    console.error("Swap TXN Error: Single captain player data missing during swap!");
+                    currentData.bannedCharacters.push(charName);
+                    historyString = `${myPlayerData.team}0 ${charName}. `;
                 }
-                currentData.teamASwapIntent = false;
-                currentData.teamBSwapIntent = false;
-                if (currentData.players && currentData.players[singleCaptainUid]) {
-                    currentData.players[singleCaptainUid].isReady = false;
-                }
-            } else {
-                console.warn("Swap TXN: Single captain exists, but clicker is not them or team mismatch. Aborting.");
-                currentData.teamASwapIntent = false;
-                currentData.teamBSwapIntent = false;
+                actionTaken = true;
+            } else if (currentData.currentPhase === 'pick' && !isSkip) {
+                if (myPlayerData.team === 'A') currentData.teamAPicks.push(charName);
+                else currentData.teamBPicks.push(charName);
+                historyString = `${myPlayerData.team}${pickNumber} ${charName}. `;
+                actionTaken = true;
             }
-        } else if (bothCaptains) {
-            console.log("Swap TXN: Both captains present, using intent logic.");
-            if (myCurrentTeam === 'A') {
-                currentData.teamASwapIntent = !currentData.teamASwapIntent;
-            } else {
-                currentData.teamBSwapIntent = !currentData.teamBSwapIntent;
-            }
-            console.log(`Swap TXN: Intent states - A: ${currentData.teamASwapIntent}, B: ${currentData.teamBSwapIntent}`);
-            if (currentData.teamASwapIntent && currentData.teamBSwapIntent) {
-                console.log("Swap TXN: Both intents true, performing swap!");
-                const tempName = currentData.teamAName;
-                currentData.teamAName = currentData.teamBName;
-                currentData.teamBName = tempName;
-                if (currentData.status === 'complete') {
-                    const tempPicks = currentData.teamAPicks;
-                    currentData.teamAPicks = currentData.teamBPicks;
-                    currentData.teamBPicks = tempPicks;
+
+            if (actionTaken) {
+                // Record history string to Firebase using push
+                const gameNum = currentData.currentGameNumber || 1;
+                // Ensure the path exists and is an array before pushing
+                currentData.matchHistory = currentData.matchHistory || {};
+                currentData.matchHistory[gameNum] = currentData.matchHistory[gameNum] || []; 
+                // Check if it's actually an array (might be object if corrupted)
+                if (!Array.isArray(currentData.matchHistory[gameNum])) {
+                    console.warn(`MP TXN: Match history for game ${gameNum} was not an array! Resetting.`);
+                    currentData.matchHistory[gameNum] = []; // Reset to array if needed
                 }
-                if (currentData.players && currentData.players[capAUid] && currentData.players[capBUid]) {
-                    currentData.players[capAUid].team = 'B';
-                    currentData.players[capBUid].team = 'A';
+                currentData.matchHistory[gameNum].push(historyString); // Add the string
+
+                const { phase, team, draftOver } = DraftLogic.determineNextTurn(
+                    currentData.currentPhase, currentData.currentTeam,
+                    currentData.bannedCharacters.length, currentData.settings.maxTotalBans,
+                    currentData.teamAPicks.length + currentData.teamBPicks.length,
+                    currentData.settings.draftOrderType
+                );
+                if (draftOver) {
+                    currentData.status = 'complete'; currentData.currentTeam = null; currentData.currentPhase = null;
+                    currentData.currentActionStartTime = null; currentData.teamASwapIntent = false; currentData.teamBSwapIntent = false;
+                    Object.values(currentData.players).forEach(p => { if(p.role === 'captain') p.isReady = false; });
                 } else {
-                    console.error("Swap TXN Error: Captain player data missing during swap!");
-                }
-                currentData.teamASwapIntent = false;
-                currentData.teamBSwapIntent = false;
-                if (currentData.players) {
-                    if (currentData.players[capAUid]) currentData.players[capAUid].isReady = false;
-                    if (currentData.players[capBUid]) currentData.players[capBUid].isReady = false;
+                    currentData.currentPhase = phase; currentData.currentTeam = team;
+                    currentData.currentActionStartTime = serverTimestamp(); 
                 }
             }
-        } else {
-            console.warn("Swap TXN: Neither single nor both captains found. Aborting swap logic.");
-            currentData.teamASwapIntent = false;
-            currentData.teamBSwapIntent = false;
+            return currentData;
+        }).catch(error => {
+            console.error("MP Select/Skip transaction failed:", error);
+            UIUpdater.notifyUser(`Action Error: ${error.message}`, 3000);
+        });
+    },
+
+    handleMultiplayerReadyUp() { 
+        const mpState = appState.multiplayer; if (!fbDb || !appState.isMultiplayerMode || !appState.currentUserId || !mpState.currentDraftId || !(mpState.playerRole === 'captainA' || mpState.playerRole === 'captainB')) return; if (mpState.draftState?.status !== 'waiting' && mpState.draftState?.status !== 'complete') return;
+        const currentReadyState = mpState.draftState?.players?.[appState.currentUserId]?.isReady ?? false; const newReadyState = !currentReadyState; const updates = {}; updates[`/players/${appState.currentUserId}/isReady`] = newReadyState;
+        if (!newReadyState) { if (mpState.playerRole === 'captainA') updates['/teamASwapIntent'] = false; if (mpState.playerRole === 'captainB') updates['/teamBSwapIntent'] = false; }
+        update(ref(fbDb, `drafts/${mpState.currentDraftId}`), updates).catch(error => UIUpdater.notifyUser("Error setting ready status.", 2000));
+    },
+
+    handleMultiplayerStartDraft() {
+        const mpState = appState.multiplayer;
+        if (!fbDb || !appState.isMultiplayerMode || !appState.currentUserId || !mpState.currentDraftId || mpState.playerRole !== 'captainA') {
+            UIUpdater.notifyUser("Only Team A captain can start.", 2000); return;
         }
-        return currentData;
-    }).then(() => {
-        console.log("Swap transaction completed.");
-    }).catch((error) => {
-        console.error("MP Swap transaction failed:", error);
-        notifyUser(`Swap Error: ${error.message || 'Unknown error.'}`, 3000);
-        const draftRef = ref(db, `drafts/${mp_currentDraftId}`);
-        const fallbackIntentUpdate = {};
-         if (mp_playerRole === 'captainA') fallbackIntentUpdate['teamASwapIntent'] = false;
-         else if (mp_playerRole === 'captainB') fallbackIntentUpdate['teamBSwapIntent'] = false;
-        if (Object.keys(fallbackIntentUpdate).length > 0) {
-           update(draftRef, fallbackIntentUpdate).catch(err => console.warn("Failed to reset own swap intent after error:", err));
-        }
-    });
-}
+        const draftRef = ref(fbDb, `drafts/${mpState.currentDraftId}`);
+        runTransaction(draftRef, (currentData) => {
+            if (!currentData) { console.warn("MP Start TXN: No data"); return; }
+            if (currentData.status !== 'waiting' && currentData.status !== 'complete') {
+                 console.log("MP Start TXN: Not in waiting or complete state."); return;
+            }
+            let playerA = null, playerB = null;
+            if (currentData.players) { for (const uid in currentData.players) { const p = currentData.players[uid]; if (p.role === 'captain') { if (p.team === 'A') playerA = p; if (p.team === 'B') playerB = p; }}}
+            if (!playerA || !playerB || !playerA.isConnected || !playerB.isConnected || !playerA.isReady || !playerB.isReady) {
+                throw new Error("Both captains must be connected and ready.");
+            }
+            console.log("MP Start TXN: Resetting for new draft.");
+            if (currentData.status === 'complete') { // If starting after a game was completed
+                currentData.currentGameNumber = (currentData.currentGameNumber || 0) + 1;
+            } 
+            
+            currentData.teamAPicks = []; currentData.teamBPicks = []; currentData.bannedCharacters = [];
+            currentData.pickOrderIndex = 0; currentData.teamASwapIntent = false; currentData.teamBSwapIntent = false;
+            Object.values(currentData.players).forEach(p => { if(p.role === 'captain') p.isReady = false; });
+            // Ensure matchHistory for the new game number exists as an empty array
+            currentData.matchHistory = currentData.matchHistory || {};
+            currentData.matchHistory[currentData.currentGameNumber] = []; // Initialize as empty array
 
-
-function isCharValidSelectionMP(charName, data) {
-    if (!data || data.status !== 'in_progress' || !charName || !data.currentPhase || !data.currentTeam) return false;
-
-    const phase = data.currentPhase;
-    const team = data.currentTeam;
-    const bans = data.bannedCharacters || [];
-    const picksA = data.teamAPicks || [];
-    const picksB = data.teamBPicks || [];
-    const hunterExclusivity = data.settings?.hunterExclusivity ?? true;
-
-    if (bans.some(b => b === charName)) return false;
-
-    if (phase === 'ban') {
-        return !picksA.includes(charName) && !picksB.includes(charName);
-    } else if (phase === 'pick') {
-        if (hunterExclusivity && ((team === 'A' && picksB.includes(charName)) || (team === 'B' && picksA.includes(charName)))) return false;
-        const myPicks = team === 'A' ? picksA : picksB;
-        return !myPicks.includes(charName);
-    }
-    return false;
-}
-
-
-function calculateNextStateMP(currentData) {
-    currentData.settings = currentData.settings || {};
-    const maxTotalBans = currentData.settings.maxTotalBans || 0;
-    currentData.bannedCharacters = currentData.bannedCharacters || [];
-    currentData.teamAPicks = currentData.teamAPicks || [];
-    currentData.teamBPicks = currentData.teamBPicks || [];
-
-    let phaseComplete = false;
-
-    if (currentData.currentPhase === 'ban') {
-        const bansMade = currentData.bannedCharacters.length;
-        if (bansMade >= maxTotalBans) {
-            currentData.currentPhase = 'pick';
+            currentData.status = 'in_progress';
+            currentData.currentPhase = (currentData.settings?.maxTotalBans ?? 0) > 0 ? 'ban' : 'pick';
             currentData.currentTeam = 'A';
-            phaseComplete = true;
-        } else {
-            currentData.currentTeam = currentData.currentTeam === 'A' ? 'B' : 'A';
-            phaseComplete = true;
-        }
-    } else if (currentData.currentPhase === 'pick') {
-        const totalPicksMade = currentData.teamAPicks.length + currentData.teamBPicks.length;
-        if (totalPicksMade >= TOTAL_PICKS_NEEDED) {
-            currentData.status = 'complete';
-            currentData.currentTeam = null;
-            currentData.currentPhase = null;
-            currentData.currentActionStartTime = null;
-            currentData.teamASwapIntent = false;
-            currentData.teamBSwapIntent = false;
-            phaseComplete = true;
-        } else {
-            const draftOrderType = currentData.settings?.draftOrderType || 'Snake';
-            const picksMadeCount = totalPicksMade; // Number of picks *already completed*
+            currentData.currentActionStartTime = serverTimestamp();
+            return currentData;
+        }).catch(err => UIUpdater.notifyUser(`Failed to start draft: ${err.message}`, 3000));
+    },
 
-            if (draftOrderType === 'Alt') {
-                // Alt order: A B B A B A A B
-                if (picksMadeCount === 1) currentData.currentTeam = 'B';      // After A's 1st
-                else if (picksMadeCount === 2) currentData.currentTeam = 'B'; // After B's 1st
-                else if (picksMadeCount === 3) currentData.currentTeam = 'A'; // After B's 2nd
-                else if (picksMadeCount === 4) currentData.currentTeam = 'B'; // After A's 2nd
-                else if (picksMadeCount === 5) currentData.currentTeam = 'A'; // After B's 3rd
-                else if (picksMadeCount === 6) currentData.currentTeam = 'A'; // After A's 3rd
-                else if (picksMadeCount === 7) currentData.currentTeam = 'B'; // After A's 4th
-            } else { // Default to Snake order: A-BB-AA-BB-A
-                const currentPickIndex = picksMadeCount -1; // 0-based index of the pick just made
-                if (currentPickIndex === 0 || currentPickIndex === 1 || currentPickIndex === 4 || currentPickIndex === 5) {
-                    currentData.currentTeam = 'B';
-                } else { // Indices 2, 3, 6
-                    currentData.currentTeam = 'A';
-                }
-            }
-            phaseComplete = true;
-        }
-    } else {
-        console.error("MP calculateNextState: Invalid phase:", currentData.currentPhase);
+    handleMultiplayerConfigUpdate(settingName, value) { 
+        const mpState = appState.multiplayer; if (!fbDb || !appState.isMultiplayerMode || !mpState.currentDraftId || mpState.playerRole !== 'captainA') { UIUpdater.updateConfigInputsState(true, mpState.draftState?.settings); return; } const draftStatus = mpState.draftState?.status; if (draftStatus !== 'waiting' && draftStatus !== 'complete') { UIUpdater.updateConfigInputsState(true, mpState.draftState?.settings); return; } let processedValue = value; if (settingName === 'maxTotalBans' || settingName === 'timerDuration') { processedValue = parseInt(value); if (isNaN(processedValue)) { UIUpdater.updateConfigInputsState(true, mpState.draftState?.settings); return; } } console.log(`MP: Captain A updating setting '${settingName}' to '${processedValue}'`); set(ref(fbDb, `drafts/${mpState.currentDraftId}/settings/${settingName}`), processedValue).catch(error => UIUpdater.notifyUser(`Error updating ${settingName}.`, 2000));
+    },
+    
+    handleMultiplayerEditTeamName(event) { 
+        const mpState = appState.multiplayer; if (!fbDb || !appState.isMultiplayerMode || !mpState.currentDraftId || !appState.currentUserId || !mpState.draftState) return; const button = event.target; const headingDiv = button.closest('div.team-heading'); if (!headingDiv) return; const teamId = headingDiv.id.includes('team-a') ? 'A' : 'B'; const myPlayerData = mpState.draftState.players?.[appState.currentUserId]; const draftStatus = mpState.draftState.status; if (!(myPlayerData?.role === 'captain' && myPlayerData?.team === teamId && (draftStatus === 'waiting' || draftStatus === 'complete'))) { UIUpdater.notifyUser("Can only edit your team's name before/after draft.", 2000); return; } const currentName = (teamId === 'A' ? mpState.draftState.teamAName : mpState.draftState.teamBName) || `Team ${teamId}`; const newName = prompt(`Enter new name for Team ${teamId}:`, currentName); if (newName && newName.trim() !== "" && newName.trim().length <= 20) { set(ref(fbDb, `drafts/${mpState.currentDraftId}/team${teamId}Name`), newName.trim()).catch(err => UIUpdater.notifyUser("Error updating name.", 2000)); } else if (newName !== null) { UIUpdater.notifyUser("Invalid name (max 20 chars).", 2000); }
     }
+};
 
-    if (phaseComplete && currentData.status === 'in_progress') {
-        currentData.currentActionStartTime = serverTimestamp();
-    } else if (currentData.status !== 'in_progress') {
-        currentData.currentActionStartTime = null;
-    }
-
-    return currentData;
-}
-
-
-function setupPresence(userId) {
-    if (!db || !userId) { console.warn("MP Presence setup skipped: DB/userId missing."); return; }
-
-    const userStatusDatabaseRef = ref(db, `/status/${userId}`);
-    const isOfflineForDatabase = { state: 'offline', last_changed: serverTimestamp() };
-    const isOnlineForDatabase = { state: 'online', last_changed: serverTimestamp() };
-    const connectedRef = ref(db, '.info/connected');
-
-    onValue(connectedRef, (snapshot) => {
-        const connected = snapshot.val();
-        if (connected === false) return;
-
-        onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
-            set(userStatusDatabaseRef, isOnlineForDatabase);
-            const currentDraftIdForHook = mp_currentDraftId;
-            const currentUserIdForHook = mp_currentUserId;
-            const currentPlayerRoleForHook = mp_playerRole;
-
-            if (isMultiplayerMode && currentDraftIdForHook && currentUserIdForHook) {
-                 const playerRef = ref(db, `drafts/${currentDraftIdForHook}/players/${currentUserIdForHook}`);
-                 const draftRootRef = ref(db, `drafts/${currentDraftIdForHook}`);
-                 const onDisconnectUpdates = {
-                     [`/players/${currentUserIdForHook}/isConnected`]: false,
-                 };
-                 if (currentPlayerRoleForHook === 'captainA') {
-                     onDisconnectUpdates[`/players/${currentUserIdForHook}/isReady`] = false;
-                     onDisconnectUpdates[`/teamASwapIntent`] = false;
-                 } else if (currentPlayerRoleForHook === 'captainB') {
-                     onDisconnectUpdates[`/players/${currentUserIdForHook}/isReady`] = false;
-                     onDisconnectUpdates[`/teamBSwapIntent`] = false;
-                 }
-                 onDisconnect(draftRootRef).update(onDisconnectUpdates).then(() => {
-                     update(playerRef, { isConnected: true })
-                        .catch(err => console.warn(`MP Presence Error setting draft connected: ${err.message}`));
-                 }).catch(err => console.error(`MP Presence Error setting draft onDisconnect:`, err));
-            }
-        }).catch(err => console.error("MP Presence Error setting global onDisconnect:", err));
-    }, (error) => {
-        console.error("MP Presence Error reading connection state:", error);
+function setupAuthentication() { 
+    if (!fbAuth || fbAuthError) { console.error("Auth setup skipped: Firebase Auth failed or unavailable.", fbAuthError); UIUpdater.updateMultiplayerButtonVisibility(); return; }
+    onAuthStateChanged(fbAuth, (user) => {
+        if (user) { console.log("Auth: User state changed. UID:", user.uid, "Current app UID:", appState.currentUserId); if (appState.currentUserId === user.uid && appState.currentUserId !== null) { console.log("Auth: UID matches existing."); if (appState.isMultiplayerMode && appState.multiplayer.currentDraftId) { FirebaseOps.setupPresence(user.uid); } UIUpdater.updateMultiplayerButtonVisibility(); return; } console.log(`Auth: New User/UID. Old: ${appState.currentUserId}, New: ${user.uid}`); appState.currentUserId = user.uid; appState.authError = null; FirebaseOps.setupPresence(user.uid); if (!appState.isMultiplayerMode) { UIUpdater.updateMultiplayerButtonVisibility(); UIUpdater.updateStatusMessageText(); } else { console.log("Auth: State changed while in MP mode."); UIUpdater.updateMultiplayerButtonVisibility(); if(appState.multiplayer.draftState && Object.keys(appState.multiplayer.draftState).length > 0) { UIUpdater.renderMultiplayerMainUI(appState.multiplayer.draftState); } else if (appState.multiplayer.currentDraftId) { FirebaseOps.subscribeToDraftChanges(appState.multiplayer.currentDraftId); } }
+        } else { console.log("Auth: User signed out."); if (appState.isMultiplayerMode) FirebaseOps.leaveRoomCleanup(); appState.currentUserId = null; appState.authError = null; sessionStorage.removeItem('currentDraftId'); sessionStorage.removeItem('playerRole'); updateApplicationMode(false); UIUpdater.updateStatusMessageText(); }
     });
+    signInAnonymously(fbAuth).catch((error) => { console.error("Anonymous sign-in failed:", error); appState.authError = error; fbAuthError = error; appState.currentUserId = null; UIUpdater.updateMultiplayerButtonVisibility(); UIUpdater.setText(DOMElements.statusMessage, "Authentication Failed."); });
 }
 
-
-// ========================================================================= //
-// ==================== EVENT DISPATCHER & LISTENERS ======================= //
-// ========================================================================= //
-
-function handleCharacterClick(charName) {
-    if (isMultiplayerMode) handleMultiplayerSelect(charName);
-    else handleLocalSelect(charName);
+function handleCharacterClick(charName) { 
+    if (appState.isMultiplayerMode) { FirebaseOps.handleMultiplayerSelectAction(charName, false); } else { handleLocalSelect(charName); }
 }
 
 function handleConfigButtonClick() {
-    const configPanel = document.getElementById('config');
+    const configPanel = DOMElements.configPanel;
     if (!configPanel) return;
+    
+    const isHidden = configPanel.classList.contains('hidden');
 
-    if (isMultiplayerMode) {
-         const draftStatus = mp_draftState?.status;
-         const canToggle = mp_playerRole === 'captainA' && (draftStatus === 'waiting' || draftStatus === 'complete');
-         if (canToggle) {
-             updateConfigInputsState(false, true);
-             configPanel.classList.toggle('hidden');
-         } else {
-             configPanel.classList.add('hidden');
-         }
-    } else {
-        if (!local_draftActive) {
-            configPanel.classList.toggle('hidden');
-        } else {
-             configPanel.classList.add('hidden');
-        }
-    }
-}
-
-
-function attachEventListeners() {
-    document.getElementById('start-draft')?.addEventListener('click', () => {
-        if (isMultiplayerMode) handleMultiplayerStartDraft(); else handleLocalStartDraft();
-    });
-
-     document.getElementById('skip-ban')?.addEventListener('click', () => {
-         if (isMultiplayerMode) handleMultiplayerSkipBan(); else handleLocalSkipBan();
-     });
-
-    document.getElementById('config-button')?.addEventListener('click', handleConfigButtonClick);
-
-    document.getElementById('hunter-exclusivity')?.addEventListener('change', (e) => {
-        const newValue = e.target.checked;
-        if (isMultiplayerMode) {
-            handleMultiplayerConfigUpdate('hunterExclusivity', newValue);
-        } else if (!local_draftActive) {
-            local_hunterExclusivity = newValue;
-        } else {
-            e.target.checked = local_hunterExclusivity;
-        }
-    });
-
-    document.getElementById('ban-count')?.addEventListener('change', (e) => {
-        const newValue = parseInt(e.target.value);
-         if (isMultiplayerMode) {
-             handleMultiplayerConfigUpdate('maxTotalBans', newValue);
-         } else if (!local_draftActive) {
-             local_maxBansPerTeam = newValue / 2;
-         } else {
-             e.target.value = (local_maxBansPerTeam * 2).toString();
-         }
-    });
-
-    document.getElementById('timer-enabled')?.addEventListener('change', (e) => {
-        const newValue = e.target.checked;
-         if (isMultiplayerMode) {
-             handleMultiplayerConfigUpdate('timerEnabled', newValue);
-         } else if (!local_draftActive) {
-             local_timerEnabled = newValue;
-         } else {
-             e.target.checked = local_timerEnabled;
-         }
-    });
-
-    document.getElementById('timer-duration')?.addEventListener('change', (e) => {
-         let newDuration = parseInt(e.target.value);
-         if (isNaN(newDuration) || newDuration <= 0) {
-             newDuration = DEFAULT_TIMER_DURATION;
-             e.target.value = newDuration;
-         }
-         if (isMultiplayerMode) {
-             handleMultiplayerConfigUpdate('timerDuration', newDuration);
-         } else if (!local_draftActive) {
-             local_timerDuration = newDuration;
-         } else {
-              e.target.value = local_timerDuration;
-         }
-    });
-
-    // NEW: Event listener for draft order type select
-    document.getElementById('draft-order-type-select')?.addEventListener('change', (e) => {
-        const newValue = e.target.value;
-        if (isMultiplayerMode) {
-            handleMultiplayerConfigUpdate('draftOrderType', newValue);
-        } else if (!local_draftActive) {
-            local_draftOrderType = newValue; // Update local state if not drafting
-        } else {
-            // Revert UI if changed inappropriately during a local draft
-            e.target.value = local_draftOrderType;
-        }
-    });
-
-
-    document.getElementById('create-room-button')?.addEventListener('click', createRoom);
-    document.getElementById('join-room-button')?.addEventListener('click', () => {
-        const joinContainer = document.getElementById('join-room-input-container');
-        const roomInput = document.getElementById('room-code-input');
-        if (mp_currentUserId && !isMultiplayerMode && joinContainer && roomInput) {
-             joinContainer.classList.remove('hidden');
-             roomInput.focus();
-        }
-    });
-    document.getElementById('join-room-form')?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const roomInput = document.getElementById('room-code-input');
-        const joinContainer = document.getElementById('join-room-input-container');
-        if (!isMultiplayerMode && roomInput?.value) {
-             joinRoom(roomInput.value);
-             roomInput.value = '';
-             if (joinContainer) joinContainer.classList.add('hidden');
-        } else if (!roomInput?.value) {
-             alert("Please enter a room code.");
-        }
-    });
-    document.getElementById('leave-room-button')?.addEventListener('click', leaveRoomCleanup);
-    document.getElementById('ready-button')?.addEventListener('click', () => {
-         handleMultiplayerReadyUp();
-    });
-
-    document.getElementById('reconnect-button')?.addEventListener('click', () => {
-        const storedDraftId = sessionStorage.getItem('currentDraftId');
-        if (storedDraftId && mp_currentUserId && !isMultiplayerMode) {
-            console.log("Reconnect button clicked. Attempting to join room:", storedDraftId);
-            joinRoom(storedDraftId);
-        } else {
-            console.warn("Reconnect button clicked but conditions not met (no stored ID, not auth'd, or already in MP mode).");
-            updateMultiplayerButtonStates();
-        }
-    });
-
-    document.getElementById('cancel-session-button')?.addEventListener('click', () => {
-        console.log("Cancel Session button clicked. Clearing session storage.");
-        sessionStorage.removeItem('currentDraftId');
-        sessionStorage.removeItem('playerRole');
-        notifyUser("Previous room session cancelled.", 2000);
-        updateMultiplayerButtonStates();
-        updateStatusMessage();
-    });
-}
-
-// ========================================================================= //
-// ==================== AUTHENTICATION LOGIC ============================ //
-// ========================================================================= //
-
-function setupAuthentication() {
-    if (!auth || authError) {
-        console.error("Auth setup skipped: Firebase Auth failed or unavailable.", authError);
-        updateMultiplayerButtonStates();
-        return;
-    }
-    onAuthStateChanged(auth, handleAuthStateChange);
-    signInAnonymously(auth)
-        .catch((error) => {
-            console.error("Anonymous sign-in failed:", error);
-            authError = error;
-            mp_currentUserId = null;
-            updateMultiplayerButtonStates();
-            const statusMsg = document.getElementById('status-message');
-            if (statusMsg) statusMsg.textContent = "Authentication Failed.";
-        });
-}
-
-function handleAuthStateChange(user) {
-    if (user) {
-        console.log("handleAuthStateChange: Signed In. UID:", user.uid);
-        if (mp_currentUserId === user.uid) {
-            console.log("handleAuthStateChange: UID matches existing. Likely token refresh.");
-            if (isMultiplayerMode) setupPresence(mp_currentUserId);
-            updateMultiplayerButtonStates();
-            return;
-        }
-
-        console.log(`handleAuthStateChange: New User/UID. Old: ${mp_currentUserId}, New: ${user.uid}`);
-        mp_currentUserId = user.uid;
-        authError = null;
-        setupPresence(mp_currentUserId);
-
-        if (!isMultiplayerMode) {
-            const storedDraftId = sessionStorage.getItem('currentDraftId');
-            if (storedDraftId) {
-                 console.log(`handleAuthStateChange: Found session ${storedDraftId}. Auto-rejoin disabled, showing manual buttons.`);
-            } else {
-                 console.log(`handleAuthStateChange: No session found. Showing standard Create/Join.`);
+    if (appState.isMultiplayerMode) {
+        const data = appState.multiplayer.draftState;
+        const draftStatus = data?.status;
+        // Only Captain A can toggle config, and only when waiting or complete
+        const canToggle = appState.multiplayer.playerRole === 'captainA' && 
+                          (draftStatus === 'waiting' || draftStatus === 'complete');
+        
+        if (canToggle) {
+            if (isHidden) { // If opening panel
+                UIUpdater.updateConfigInputsState(false, data.settings); // Enable and sync inputs
+                UIUpdater.show(configPanel);
+            } else { // If closing panel
+                UIUpdater.hide(configPanel);
+                // Keep inputs disabled after closing (will be re-enabled if opened again)
+                 UIUpdater.updateConfigInputsState(true, data.settings); 
             }
-            updateMultiplayerButtonStates();
-        } else {
-             console.log("handleAuthStateChange: Auth state changed while already in MP mode.");
-             updateMultiplayerButtonStates();
-             if (mp_draftState) {
-                renderMultiplayerUI(mp_draftState);
-             }
+        } else { // Conditions not met, ensure panel is hidden and inputs disabled
+            UIUpdater.hide(configPanel);
+            UIUpdater.updateConfigInputsState(true, data?.settings);
         }
-    } else {
-        console.log("handleAuthStateChange: User signed out.");
-        if (isMultiplayerMode) {
-             console.log("Auth lost while in MP mode. Cleaning up.");
-             leaveRoomCleanup();
+    } else { // Local mode
+        if (!appState.local.draftActive) {
+            // Toggle visibility only if draft is not active
+            if (isHidden) { 
+                UIUpdater.show(configPanel); 
+            } else { 
+                UIUpdater.hide(configPanel);
+            } 
+
         } else {
-             mp_currentUserId = null;
-             authError = null;
-             sessionStorage.removeItem('currentDraftId');
-             sessionStorage.removeItem('playerRole');
-             updateMultiplayerButtonStates();
-             enableLocalDraftControls();
-             updateStatusMessage();
+            // Ensure hidden if draft is active
+            UIUpdater.hide(configPanel); 
         }
+         // Update input disabled state based on panel visibility AND draft state
+         UIUpdater.updateConfigInputsState(configPanel.classList.contains('hidden') || appState.local.draftActive);
     }
 }
 
-// ========================================================================= //
-// ========================= INITIALIZATION ================================ //
-// ========================================================================= //
+
+function handleSwapIntentClick(event) { 
+    const mpState = appState.multiplayer; if (!fbDb || !appState.isMultiplayerMode || !appState.currentUserId || !mpState.currentDraftId || !mpState.draftState || !(mpState.playerRole === 'captainA' || mpState.playerRole === 'captainB')) { console.warn("Swap Intent: Conditions not met."); return; } const draftStatus = mpState.draftState.status; if (draftStatus !== 'waiting' && draftStatus !== 'complete') { console.log("Swap Intent: Can only swap in 'waiting' or 'complete'."); return; } const draftRef = ref(fbDb, `drafts/${mpState.currentDraftId}`); const myCurrentTeam = mpState.playerRole === 'captainA' ? 'A' : 'B'; console.log(`Swap Intent: Clicked by Captain ${myCurrentTeam}`);
+    runTransaction(draftRef, (currentData) => {
+        if (!currentData || (currentData.status !== 'waiting' && currentData.status !== 'complete')) return; const capAUid = FirebaseOps.findCaptainUid(currentData.players, 'A'); const capBUid = FirebaseOps.findCaptainUid(currentData.players, 'B');
+        if ((capAUid && !capBUid) || (!capAUid && capBUid)) { const singleCapUid = capAUid || capBUid; if (singleCapUid === appState.currentUserId) { console.log(`Swap TXN: Single captain ${myCurrentTeam} initiating immediate swap.`); const tempName = currentData.teamAName; currentData.teamAName = currentData.teamBName; currentData.teamBName = tempName; if (currentData.status === 'complete') { const tempPicks = currentData.teamAPicks; currentData.teamAPicks = currentData.teamBPicks; currentData.teamBPicks = tempPicks; } if (currentData.players[singleCapUid]) currentData.players[singleCapUid].team = (currentData.players[singleCapUid].team === 'A' ? 'B' : 'A'); currentData.teamASwapIntent = false; currentData.teamBSwapIntent = false; if (currentData.players[singleCapUid]) currentData.players[singleCapUid].isReady = false; }}
+        else if (capAUid && capBUid) { console.log(`Swap TXN: Both captains present. My team: ${myCurrentTeam}`); if (myCurrentTeam === 'A') currentData.teamASwapIntent = !currentData.teamASwapIntent; else currentData.teamBSwapIntent = !currentData.teamBSwapIntent; console.log(`Swap TXN: Intents - A: ${currentData.teamASwapIntent}, B: ${currentData.teamBSwapIntent}`); if (currentData.teamASwapIntent && currentData.teamBSwapIntent) { console.log("Swap TXN: Both intents true, performing swap!"); const tempName = currentData.teamAName; currentData.teamAName = currentData.teamBName; currentData.teamBName = tempName; if (currentData.status === 'complete') { const tempPicks = currentData.teamAPicks; currentData.teamAPicks = currentData.teamBPicks; currentData.teamBPicks = tempPicks; } if (currentData.players[capAUid] && currentData.players[capBUid]) { currentData.players[capAUid].team = 'B'; currentData.players[capBUid].team = 'A'; } currentData.teamASwapIntent = false; currentData.teamBSwapIntent = false; if (currentData.players[capAUid]) currentData.players[capAUid].isReady = false; if (currentData.players[capBUid]) currentData.players[capBUid].isReady = false; }} 
+        return currentData;
+    }).catch(error => { UIUpdater.notifyUser(`Swap Error: ${error.message}`, 3000); console.error("Swap Transaction Error:", error); });
+}
+
+
+function attachEventListeners() { 
+    DOMElements.startDraftButton?.addEventListener('click', () => { appState.isMultiplayerMode ? FirebaseOps.handleMultiplayerStartDraft() : handleLocalStartDraft(); });
+    DOMElements.skipBanButton?.addEventListener('click', () => { appState.isMultiplayerMode ? FirebaseOps.handleMultiplayerSelectAction(null, true) : handleLocalSkipBan(); });
+    DOMElements.configButton?.addEventListener('click', handleConfigButtonClick);
+    DOMElements.hunterExclusivityCheckbox?.addEventListener('change', (e) => { const val = e.target.checked; if (appState.isMultiplayerMode) FirebaseOps.handleMultiplayerConfigUpdate('hunterExclusivity', val); else if (!appState.local.draftActive) appState.local.hunterExclusivity = val; else e.target.checked = appState.local.hunterExclusivity; });
+    DOMElements.banCountSelect?.addEventListener('change', (e) => { const val = parseInt(e.target.value); if (appState.isMultiplayerMode) FirebaseOps.handleMultiplayerConfigUpdate('maxTotalBans', val); else if (!appState.local.draftActive) appState.local.maxBansPerTeam = val / 2; else e.target.value = (appState.local.maxBansPerTeam * 2).toString(); });
+    DOMElements.timerEnabledCheckbox?.addEventListener('change', (e) => { const val = e.target.checked; if (appState.isMultiplayerMode) FirebaseOps.handleMultiplayerConfigUpdate('timerEnabled', val); else if (!appState.local.draftActive) appState.local.timerEnabled = val; else e.target.checked = appState.local.timerEnabled; });
+    DOMElements.timerDurationInput?.addEventListener('change', (e) => { let val = parseInt(e.target.value); if (isNaN(val) || val <= 0) { val = DEFAULT_TIMER_DURATION_SECONDS; e.target.value = val; } if (appState.isMultiplayerMode) FirebaseOps.handleMultiplayerConfigUpdate('timerDuration', val); else if (!appState.local.draftActive) appState.local.timerDuration = val; else e.target.value = appState.local.timerDuration; });
+    DOMElements.draftOrderTypeSelect?.addEventListener('change', (e) => { const val = e.target.value; if (appState.isMultiplayerMode) FirebaseOps.handleMultiplayerConfigUpdate('draftOrderType', val); else if (!appState.local.draftActive) appState.local.draftOrderType = val; else e.target.value = appState.local.draftOrderType; });
+    DOMElements.createRoomButton?.addEventListener('click', FirebaseOps.createRoom);
+    DOMElements.joinRoomButton?.addEventListener('click', () => { if (appState.currentUserId && !appState.isMultiplayerMode) { UIUpdater.show(DOMElements.joinRoomInputContainer); DOMElements.roomCodeInput?.focus(); }});
+    DOMElements.joinRoomForm?.addEventListener('submit', (event) => { event.preventDefault(); if (!appState.isMultiplayerMode && DOMElements.roomCodeInput?.value) { FirebaseOps.joinRoom(DOMElements.roomCodeInput.value); DOMElements.roomCodeInput.value = ''; UIUpdater.hide(DOMElements.joinRoomInputContainer); } else if (!DOMElements.roomCodeInput?.value) { UIUpdater.notifyUser("Please enter a room code.", 2000); }});
+    DOMElements.leaveRoomButton?.addEventListener('click', FirebaseOps.leaveRoomCleanup);
+    DOMElements.readyButton?.addEventListener('click', FirebaseOps.handleMultiplayerReadyUp);
+    DOMElements.reconnectButton?.addEventListener('click', () => { const storedDraftId = sessionStorage.getItem('currentDraftId'); if (storedDraftId && appState.currentUserId && !appState.isMultiplayerMode) { FirebaseOps.joinRoom(storedDraftId); } else { UIUpdater.updateMultiplayerButtonVisibility(); }});
+    DOMElements.cancelSessionButton?.addEventListener('click', () => { sessionStorage.removeItem('currentDraftId'); sessionStorage.removeItem('playerRole'); UIUpdater.notifyUser("Previous room session cancelled.", 2000); UIUpdater.updateMultiplayerButtonVisibility(); UIUpdater.updateStatusMessageText(); });
+}
 
 function initializeWebApp() {
-    console.log("Initializing Web App...");
-    createCharacterPoolElements();
-
-    const exclusivityCheck = document.getElementById('hunter-exclusivity');
-    const banSelect = document.getElementById('ban-count');
-    const timerEnabledCheck = document.getElementById('timer-enabled');
-    const timerDurationInput = document.getElementById('timer-duration');
-    const draftOrderSelect = document.getElementById('draft-order-type-select'); // NEW
-
-    const totalBans = banSelect ? parseInt(banSelect.value) : 2;
-    local_maxBansPerTeam = totalBans / 2;
-    local_hunterExclusivity = exclusivityCheck ? exclusivityCheck.checked : true;
-    local_timerEnabled = timerEnabledCheck ? timerEnabledCheck.checked : false;
-    local_timerDuration = timerDurationInput ? parseInt(timerDurationInput.value) : DEFAULT_TIMER_DURATION;
-    if (local_timerDuration <= 0) local_timerDuration = DEFAULT_TIMER_DURATION;
-    local_draftOrderType = draftOrderSelect ? draftOrderSelect.value : 'Snake'; // NEW
-
-    console.log("Initial Local Config:", { local_maxBansPerTeam, local_hunterExclusivity, local_timerEnabled, local_timerDuration, local_draftOrderType }); // NEW: Added draftOrderType
-
-    if(timerEnabledCheck) timerEnabledCheck.checked = local_timerEnabled;
-    if(timerDurationInput) timerDurationInput.value = local_timerDuration;
-    if(draftOrderSelect) draftOrderSelect.value = local_draftOrderType; // NEW
-
-
-    updateMode(false);
+    const pool = DOMElements.characterPool; if (pool && pool.children.length === 0) { CHARACTERS.forEach(char => { const charDiv = document.createElement('div'); charDiv.className = 'character'; charDiv.dataset.charName = char.name; const img = document.createElement('img'); img.src = char.icon; img.alt = char.name; img.loading = 'lazy'; charDiv.appendChild(img); const nameSpan = document.createElement('span'); nameSpan.textContent = char.name; charDiv.appendChild(nameSpan); charDiv.addEventListener('click', () => handleCharacterClick(char.name)); pool.appendChild(charDiv); });}
+    appState.local.hunterExclusivity = DOMElements.hunterExclusivityCheckbox.checked;
+    appState.local.maxBansPerTeam = parseInt(DOMElements.banCountSelect.value) / 2;
+    appState.local.timerEnabled = DOMElements.timerEnabledCheckbox.checked;
+    appState.local.timerDuration = parseInt(DOMElements.timerDurationInput.value) || DEFAULT_TIMER_DURATION_SECONDS;
+    if (appState.local.timerDuration <= 0) appState.local.timerDuration = DEFAULT_TIMER_DURATION_SECONDS;
+    appState.local.draftOrderType = DOMElements.draftOrderTypeSelect.value;
+    UIUpdater.hide(DOMElements.gameCounterDisplay); 
+    updateApplicationMode(false); 
     attachEventListeners();
     setupAuthentication();
-    console.log("Initialization complete.");
 }
 
-// --- Start the initialization ---
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeWebApp);
 } else {

@@ -152,6 +152,12 @@ body {
     cursor: not-allowed;
 }
 
+.character.both-picked {
+    background: linear-gradient(to left, rgba(255, 0, 0, 0.2), rgba(0, 0, 255, 0.2));
+    opacity: 0.9;
+    cursor: not-allowed;
+}
+
 .character.auto-selected::after {
     content: '🕒';
     position: absolute;
@@ -322,7 +328,6 @@ button:disabled {
     font-size: 10px;
     width: 15%;
     margin-left: auto;
-    margin-top: auto;
 }
 
 #spectator-list {
