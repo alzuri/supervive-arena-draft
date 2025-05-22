@@ -16,13 +16,6 @@
 </head>
 <body>
     <div class="container">
-        <div id="team-a" class="team">
-            <div class="team-top">
-                <b><div id="team-a-heading" class="team-heading">Team A <button id="team-action" class="edit-team-name">✎</button></div></b>
-                <div id="team-a-captain"></div>
-            </div>
-            <div id="team-a-picks"></div>
-        </div>
         <div class="middle-section">
             <div class="draft-status">
                 <div class="controls-wrapper">
@@ -89,25 +82,34 @@
                 <button id="leave-room-button" class="hidden">Leave Room</button>
                 <button id="skip-ban">Skip Ban</button>
             </div>
-            <div id="character-pool"></div>
-            <div id="history-spectator">
-                <details id="match-history-container">
-                    <summary>Match History</summary>
-                    <div id="match-history"></div>
-                </details>
-                <details id="spectator-list-container">
-                    <summary>Spectators</summary>
-                    <div id="spectator-list"></div>
-                </details>
+        </div>
+<div id="teams-wrapper">
+    <div id="team-a" class="team">
+        <div class="team-top">
+            <b><div id="team-a-heading" class="team-heading">Team A <button id="team-action" class="edit-team-name">✎</button></div></b>
+            <div id="team-a-captain"></div>
+        </div>
+        <div id="team-a-picks"></div>
+    </div>
+    <div id="team-b" class="team">
+        <div class="team-top">
+            <b><div id="team-b-heading" class="team-heading">Team B <button id="team-action" class="edit-team-name">✎</button></div></b>
+            <div id="team-b-captain"></div>
+        </div>
+        <div id="team-b-picks"></div>
             </div>
         </div>
-        <div id="team-b" class="team">
-            <div class="team-top">
-                <b><div id="team-b-heading" class="team-heading">Team B <button id="team-action" class="edit-team-name">✎</button></div></b>
-                <div id="team-b-captain"></div>
-            </div>
-            <div id="team-b-picks"></div>
-        </div>
+    </div>
+    <div id="character-pool"></div>
+    <div id="history-spectator">
+        <details id="match-history-container">
+            <summary>Match History</summary>
+            <div id="match-history"></div>
+        </details>
+        <details id="spectator-list-container">
+            <summary>Spectators</summary>
+            <div id="spectator-list"></div>
+        </details>
     </div>
     <div class="footer">from <b>RX</b> with ❤️</div>
     <script type="module" src="script.js"></script>

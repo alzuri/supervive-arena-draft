@@ -395,3 +395,49 @@ button:disabled {
     outline-color: red;
     animation: blink-opacity 1s ease-in-out infinite;
 }
+
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto; /* Adjusted for four main sections */
+    }
+
+    .middle-section {
+        order: 1;
+    }
+
+    /* #team-a and #team-b order is removed as they are now children of #teams-wrapper */
+    #team-a {
+        /* order: 2; */ /* Removed */
+    }
+
+    #team-b {
+        /* order: 3; */ /* Removed */
+    }
+
+    #teams-wrapper {
+        display: flex;
+        flex-direction: row;
+        order: 2;
+        gap: 10px; /* Optional gap between team sections */
+    }
+
+    #teams-wrapper #team-a,
+    #teams-wrapper #team-b {
+        flex: 1; /* Make team sections share space equally */
+    }
+
+    #character-pool {
+        order: 3;
+    }
+
+    #history-spectator {
+        order: 4;
+    }
+}
+
+@media (max-width: 480px) {
+    #character-pool {
+        grid-template-columns: repeat(2, minmax(80px, 1fr));
+    }
+}
