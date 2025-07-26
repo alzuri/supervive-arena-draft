@@ -63,7 +63,7 @@ body {
 
 #character-pool {
     display: grid;
-    grid-template-columns: repeat(7, minmax(100px, 1fr));
+    grid-template-columns: repeat(5, minmax(100px, 1fr));
     gap: 10px;
     padding: 10px;
     background: rgba(255, 255, 255, 0.1);
@@ -73,13 +73,13 @@ body {
 
 @media (max-width: 1045px) {
     #character-pool {
-        grid-template-columns: repeat(3, minmax(100px, 1fr));
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
     }
 }
 
 @media (max-width: 800px) {
     #character-pool {
-        grid-template-columns: repeat(3, minmax(100px, 1fr));
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
     }
 }
 
